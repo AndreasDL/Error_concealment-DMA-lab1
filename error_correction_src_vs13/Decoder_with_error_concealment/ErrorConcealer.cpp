@@ -22,14 +22,28 @@ void ErrorConcealer::concealErrors(Frame *frame, Frame *referenceFrame)
 			conceal_spatial_2(frame);
 			break;
 		case 2:
-			conceal_temporal_1(frame, referenceFrame);
+			conceal_spatial_2(frame);
 			break;
 		case 3:
-			conceal_temporal_2(frame, referenceFrame);
+			conceal_temporal_1(frame, referenceFrame);
 			break;
 		case 4:
+			conceal_temporal_2(frame, referenceFrame, 1);
+			break;
+		case 5:
+			conceal_temporal_2(frame, referenceFrame, 2);
+			break;
+		case 6:
+			conceal_temporal_2(frame, referenceFrame, 3);
+			break;
+		case 7:
+			conceal_temporal_2(frame, referenceFrame, 4);
+			break;
+		case 8:
 			conceal_temporal_3(frame, referenceFrame);
 			break;
+		case 9:
+			// To be completed. Add explanatory notes in English.
 		default:
 			printf("\nWARNING: NO ERROR CONCEALMENT PERFORMED! (conceal_method %d unknown)\n\n",conceal_method);
 	}
@@ -89,6 +103,8 @@ void ErrorConcealer::conceal_spatial_1(Frame *frame)
 			else{
 				MB_b = frame->getMacroblock(MBx + frame->getWidth());
 			}
+
+
 
 			//Spatial interpolate pixels
 			for (int i = 0; i < 16; ++i)	{
@@ -388,6 +404,9 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame)
 	}
 }
 
+void ErrorConcealer::conceal_spatial_3(Frame *frame)
+{
+}
 
 
 void ErrorConcealer::conceal_temporal_1(Frame *frame, Frame *referenceFrame)
@@ -485,8 +504,9 @@ float CheckMB(Macroblock *MB, Macroblock *usedMB, Frame *frame, int MBx){
 	return errorperpixel;
 }
 
-void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame)
+void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int size)
 {
+// Sub-macroblock size to be completed. Add explanatory notes in English.
 	if(!frame->is_p_frame()){
 		conceal_spatial_2(frame);
 	}
