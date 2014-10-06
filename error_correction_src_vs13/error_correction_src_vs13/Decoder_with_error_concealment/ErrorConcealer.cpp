@@ -93,6 +93,25 @@ void ErrorConcealer::conceal_spatial_1(Frame *frame)
 			//Spatial interpolate pixels
 			for (int i = 0; i < 16; ++i)	{
 				for (int j = 0; j < 16; ++j)		{
+
+					// To easily make sure we only use 2 block, we will say only 2 blocks exist (the 2 closest blocks).
+					if (i >= 8){
+						exist_b = 1;
+						exist_t = 0;
+					}
+					else{
+						exist_b = 0;
+						exist_t = 1;
+					}
+					if (j >= 8){
+						exist_r = 1;
+						exist_l = 0;
+					}
+					else{
+						exist_r = 0;
+						exist_l = 1;
+					}
+
 					MB->luma[i][j] = ((17 - j - 1)*MB_l->luma[i][15] * exist_l + 
 						(j + 1)*MB_r->luma[i][0] * exist_r + 
 						(17 - i - 1)*MB_t->luma[15][j] * exist_t + 
