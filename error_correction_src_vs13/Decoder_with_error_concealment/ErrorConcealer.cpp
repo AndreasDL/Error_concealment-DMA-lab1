@@ -22,7 +22,7 @@ void ErrorConcealer::concealErrors(Frame *frame, Frame *referenceFrame)
 			conceal_spatial_2(frame);
 			break;
 		case 2:
-			conceal_spatial_2(frame);
+			conceal_spatial_3(frame);
 			break;
 		case 3:
 			conceal_temporal_1(frame, referenceFrame);
@@ -406,6 +406,288 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame)
 
 void ErrorConcealer::conceal_spatial_3(Frame *frame)
 {
+	int kernel_x[3][3] = { { -1, 0, 1 }, { -2, 0, 2 }, { -1, 0, 1 } };
+	int kernel_y[3][3] = { { 1, 2, 1 }, { 0, 0, 0 }, { -1, -2, -1 } };
+
+	int numMB_hor = frame->getWidth() / 16;
+	int numMB_ver = frame->getHeight() / 16;
+
+	for (int i = 0; i < frame->getNumMB(); i++){
+		Macroblock *MB = frame->getMacroblock(i);
+		if (MB->isMissing()){
+
+			////////////////////////////////////////////////////////////////////////////////
+			///// 1. Determine whether or not the MB's around the missing MB are available.
+			////////////////////////////////////////////////////////////////////////////////
+
+			Macroblock *MB_t, *MB_b, *MB_l, *MB_r;
+			int exist_t = 1, exist_b = 1, exist_l = 1, exist_r = 1;
+
+			// Determine upper macroblock
+			if (i >= numMB_hor && !frame->getMacroblock(i - numMB_hor)->isMissing()){	// For having an upper MB we should at least be on the second row, and the MB above may not be missing.
+				MB_t = frame->getMacroblock(i - numMB_hor);
+			}
+			else {
+				exist_t = 0;
+			}
+
+			// Determine lower macroblock
+			if (i < frame->getNumMB()-numMB_hor && !frame->getMacroblock(i + numMB_hor)->isMissing()){	// For having a lower MB we may not be on the last row, and the lower MB may not be missing.
+				MB_b = frame->getMacroblock(i + numMB_hor);
+			}
+			else {
+				exist_b = 0;
+			}
+
+			// Determine left macroblock
+			if (i % numMB_hor != 0 && !frame->getMacroblock(i - 1)->isMissing()){	// For having a left MB we may not be in the left column, and the left MB may not be missing.
+				MB_l = frame->getMacroblock(i - 1);
+			}
+			else {
+				exist_l = 0;
+			}
+
+			// Determine right macroblock
+			if (i % numMB_hor != numMB_hor - 1 && !frame->getMacroblock(i - numMB_hor)->isMissing()){	// For having a right MB we may not be in the right column, and the right MB may not be missing. 
+				MB_r = frame->getMacroblock(i - numMB_hor);
+			}
+			else {
+				exist_r = 0;
+			}
+
+			////////////////////////////////////////////////////////////////////////////////
+			///// 2. Extract edge data by using horizontal and vertical Sobel operator.
+			////////////////////////////////////////////////////////////////////////////////
+
+			// Example: assume 3x3 MB's. The missing MB is denoted with M.
+			//
+			//	. . . x x x . . .
+			//	. . . x O x . . .
+			//	. . . x x x . . .
+			//	x x x M M M x x x
+			//	x O x M M M x O x
+			//	x x x M M M x x x
+			//	. . . x x x . . .
+			//	. . . x O x . . .
+			//	. . . x x x . . .
+			//
+			//	We want to extract edge data at the border of the missing macroblock. To be able to convolve our Sobel kernels with these edges, we convolve the 3x3 Sobel kernel
+			//	with the rows or columns denoted with 'O' (we apply one row or column interleavin with the border, so wouldn't need pixels of the missing MB to convolve our 3x3 Sobel kernel).
+			// 
+			// For simplicity reasons, we also won't compute edge data for the pixels at the borders of the MB's, because otherwise we would also have to check if the upper-left, upper-right, ... 
+			// of the missing MB's, and then use these pixels.
+			// Please note that in the 3x3-MB case it seems really inefficient to do this, because we now only use 1 pixel out of 3 in a row or column, but in the 16x16-MB case we use 14 out of 16 pixels, 
+			// which will be much more representative for the edge.
+
+			int nrEdgePixels = (exist_b + exist_l + exist_r + exist_t) * 14;
+			double* gradients = new double[nrEdgePixels];
+			double* slopes = new double[nrEdgePixels];
+
+			//// Edge gradients and slopes will be stored the following order: top, right, bottom, left
+
+			int counter = 1;	// This counter will keep track of the position in the gradients and slopes array.
+
+			//// Calculate gradients and slope for top
+			if (exist_t == 1){
+				for (int j = counter; j < counter+14; j++){
+
+					double gradient_x = MB_t->luma[13][j - 1] * kernel_x[0][0] + MB_t->luma[13][j] * kernel_x[0][1] + MB_t->luma[13][j + 1] * kernel_x[0][2]
+						+ MB_t->luma[14][j - 1] * kernel_x[1][0] + MB_t->luma[14][j + 1] * kernel_x[1][2]
+						+ MB_t->luma[15][j - 1] * kernel_x[2][0] + MB_t->luma[15][j] * kernel_x[2][1] + MB_t->luma[15][j + 1] * kernel_x[2][2];
+
+					double gradient_y = MB_t->luma[13][j - 1] * kernel_y[0][0] + MB_t->luma[13][j] * kernel_y[0][1] + MB_t->luma[13][j + 1] * kernel_y[0][2]
+						+ MB_t->luma[14][j - 1] * kernel_y[1][0] + MB_t->luma[14][j + 1] * kernel_y[1][2]
+						+ MB_t->luma[15][j - 1] * kernel_y[2][0] + MB_t->luma[15][j] * kernel_y[2][1] + MB_t->luma[15][j + 1] * kernel_y[2][2];
+
+					gradients[j - 1] = pow((pow(gradient_x, 2) + pow(gradient_y, 2)), 1 / 2);
+					slopes[j - 1] = 1 / tan(gradient_y / gradient_x);
+				}
+				counter += 14;
+			}
+			
+			//// Calculate gradients and slope for right
+			//if (exist_r == 1){
+			//	for (int j = counter; j < counter + 14; j++){
+			//		double gradient_x = MB_r->luma[j - 1][0] * kernel_x[0][0] + MB_r->luma[j - 1][1] * kernel_x[0][1] + MB_r->luma[j - 1][2] * kernel_x[0][2]
+			//			+ MB_r->luma[j][0] * kernel_x[1][0] + MB_r->luma[j][2] * kernel_x[1][2]
+			//			+ MB_r->luma[j + 1][0] * kernel_x[2][0] + MB_r->luma[j + 1][1] * kernel_x[2][1] + MB_r->luma[j + 1][2] * kernel_x[2][2];
+
+			//		double gradient_y = MB_r->luma[j - 1][0] * kernel_y[0][0] + MB_r->luma[j - 1][1] * kernel_y[0][1] + MB_r->luma[j - 1][2] * kernel_y[0][2]
+			//			+ MB_r->luma[j][0] * kernel_y[1][0] + MB_r->luma[j][2] * kernel_y[1][2]
+			//			+ MB_r->luma[j + 1][0] * kernel_y[2][0] + MB_r->luma[j + 1][1] * kernel_y[2][1] + MB_r->luma[j + 1][2] * kernel_y[2][2];
+
+			//		gradients[j - 1] = pow((pow(gradient_x, 2) + pow(gradient_y, 2)), 1 / 2);
+			//		slopes[j - 1] = 1 / tan(gradient_y / gradient_x);
+			//	}
+			//	counter += 14;
+			//}
+
+
+			//// Calculate gradients and slope for bottom
+			//if (exist_b == 1){
+			//	for (int j = counter; j < counter + 14; j++){
+
+			//		double gradient_x = MB_b->luma[0][j - 1] * kernel_x[0][0] + MB_b->luma[0][j] * kernel_x[0][1] + MB_b->luma[0][j + 1] * kernel_x[0][2]
+			//			+ MB_b->luma[1][j - 1] * kernel_x[1][0] + MB_b->luma[1][j + 1] * kernel_x[1][2]
+			//			+ MB_b->luma[2][j - 1] * kernel_x[2][0] + MB_b->luma[2][j] * kernel_x[2][1] + MB_b->luma[2][j + 1] * kernel_x[2][2];
+
+			//		double gradient_y = MB_b->luma[0][j - 1] * kernel_y[0][0] + MB_b->luma[0][j] * kernel_y[0][1] + MB_b->luma[0][j + 1] * kernel_y[0][2]
+			//			+ MB_b->luma[1][j - 1] * kernel_y[1][0] + MB_b->luma[1][j + 1] * kernel_y[1][2]
+			//			+ MB_b->luma[2][j - 1] * kernel_y[2][0] + MB_b->luma[2][j] * kernel_y[2][1] + MB_b->luma[2][j + 1] * kernel_y[2][2];
+
+			//		gradients[j - 1] = pow((pow(gradient_x, 2) + pow(gradient_y, 2)), 1 / 2);
+			//		slopes[j - 1] = 1 / tan(gradient_y / gradient_x);
+			//	}
+			//	counter += 14;
+			//}
+
+			//// Calculate gradients and slope for left
+			//if (exist_r == 1){
+			//	for (int j = counter; j < counter + 14; j++){
+			//		double gradient_x = MB_l->luma[j - 1][13] * kernel_x[0][0] + MB_l->luma[j - 1][14] * kernel_x[0][1] + MB_l->luma[j - 1][15] * kernel_x[0][2]
+			//			+ MB_l->luma[j][13] * kernel_x[1][0] + MB_l->luma[j][15] * kernel_x[1][2]
+			//			+ MB_l->luma[j + 1][0] * kernel_x[2][0] + MB_l->luma[j + 1][1] * kernel_x[2][1] + MB_l->luma[j + 1][2] * kernel_x[2][2];
+
+			//		double gradient_y = MB_l->luma[j - 1][13] * kernel_y[0][0] + MB_l->luma[j - 1][14] * kernel_y[0][1] + MB_l->luma[j - 1][15] * kernel_y[0][2]
+			//			+ MB_l->luma[j][13] * kernel_y[1][0] + MB_l->luma[j][15] * kernel_y[1][2]
+			//			+ MB_l->luma[j + 1][13] * kernel_y[2][0] + MB_l->luma[j + 1][14] * kernel_y[2][1] + MB_l->luma[j + 1][15] * kernel_y[2][2];
+
+			//		gradients[j - 1] = pow((pow(gradient_x, 2) + pow(gradient_y, 2)), 1 / 2);
+			//		slopes[j - 1] = 1 / tan(gradient_y / gradient_x);
+			//	}
+			//	counter += 14;
+			//}
+
+			//////////////////////////////////////////////////////////////////////////////////
+			/////// 3. Determine dominant gradient direction.
+			//////////////////////////////////////////////////////////////////////////////////
+
+			//// The dominant gradient direction kan be expressed as the sum of all pixel gradients, weighted by their magnitude:
+			//// thèta_dominant = sum(slope_i*gradient_i) / sum(gradient_i)
+
+			//double nominator = 0;
+			//double denominator = 0;
+
+			//for (int j = 0; j < counter - 1; j++){
+			//	nominator += abs(gradients[i])*slopes[i];
+			//	denominator += abs(gradients[i]);
+			//}
+
+			//double dominant_direction = nominator / denominator;
+
+			//////////////////////////////////////////////////////////////////////////////////
+			/////// 4. Perform interpolation
+			//////////////////////////////////////////////////////////////////////////////////
+
+			//// For now, the interpolation is implemented with 1 direction. It is possible to divide 4, 8 (or another number) of dominant directions
+			//// to partition the macroblock in more segments. This should yield better results.
+
+			//double slope = 1 / tan(dominant_direction);
+
+			//// The interpolation formula is p(j,k) = 1/(d1+d2) * [d2p1 + d1p2]
+			//// with p1 and p2 the points in the boundaries used for interpolation.
+			////		d1 and d2 the distances from the interpolated pixel to the boundary pixels.
+			////		
+			//// p1 = p(j1,k1), p2 = p(j2,k2)
+			//// j1 = max(j - j*1/slope; 0), k1 = max(k - k*slope;0)
+			//// j2 = min(j + j*1/slope; N+1), k2 = min(k + k*slope; N+1) with N the size of a macroblock
+
+			for (int j = 0; j < 16; j++){
+				for (int k = 0; k < 16; k++){
+					//int j1 = fmax(j - j * 1 / slope, 0);
+					//int k1 = fmax(k - k * slope, 0);
+
+					//int j2 = fmin(j + j * 1 / slope, 16 + 1);
+					//int k2 = fmin(k + k * slope, 16 + 1);
+
+					//int d1_x = j * 1.0 - j1 * 1.0;
+					//int d1_y = k * 1.0 - k1 * 1.0;
+					//int d2_x = j * 1.0 + j2 * 1.0;
+					//int d2_y = k * 1.0 + k2 * 1.0;
+
+					//double d1 = pow(pow(d1_x*1.0, 2) + pow(d1_y*1.0, 2), 1 / 2);
+					//double d2 = pow(pow(d2_x*1.0, 2) + pow(d2_y*1.0, 2), 1 / 2);
+
+					//int p1;
+					//int p2;
+
+			//		// We need the value of the pixels we are going to interpolate. We can do this with the distances d1x,y, d2x,y we calculated.
+			//		// We can derive from the formulas that p1 will never be a border pixel of the right macroblock. We will check for every other macroblock.
+			//		if (j + d1_y < 0 && exist_t == 1){
+			//			// We need a pixel from the upper border.
+			//			p1 = MB_t->luma[15][k + d1_x];
+			//		}
+			//		else if (j+d1_y > 15 && exist_b == 1){
+			//			// We need a pixel from the lower border.
+			//			p1 = MB_b->luma[0][k + d1_x];
+			//		}
+			//		else if (k+d1_x < 0 && exist_l == 1){
+			//			// We need a pixel from the left border.
+			//			p1 = MB_l->luma[j + d1_y][15];
+			//		}
+
+
+			//		// p2 will never be a border pixel of the left macroblock. We will check for every other macroblock.
+			//		if (j + d2_y < 0 && exist_t == 1){
+			//			// We need a pixel from the upper border.
+			//			p2 = MB_t->luma[15][k + d2_x];
+			//		}
+			//		else if (j + d2_y > 15 && exist_b == 1){
+			//			// We need a pixel from the lower border.
+			//			p2 = MB_b->luma[0][k + d2_x];
+			//		}
+			//		else if (k + d1_x < 0 && exist_r == 1){
+			//			// We need a pixel from the right border.
+			//			p2 = MB_r->luma[j+d2_y][0];
+			//		}
+
+			//		//MB->luma[j][k] = 1.0 / (d1*1.0 + d2*1.0) * (d2*1.0*p1 + d1*1.0*p2);
+
+				}
+			}
+
+			//MB->setConcealed();
+
+		}
+	}
+
+
+	/*
+	int kRows = 3;
+	int kCols = 3;
+
+	int kCenterX = 1;
+	int kCenterY = 1;
+
+	int nn, mm, ii, jj;
+
+	Frame filtered(frame->getWidth(), frame->getHeight());
+
+
+	for (int i = 0; i < frame->getHeight(); i++){			// rows
+		for (int j = 0; j < frame->getWidth(); j++){		// columns
+			for (int m = 0; m < kRows; m++){				// kernel rows
+				mm = kRows -1 - m;							// row index of flipped kernel
+				for (int n = 0; n < kCols; n++){			// kernel columns
+					nn = kCols - 1 - n;						// column index of flipped kernel
+					
+					// index of input signal, used for checking boundary
+					ii = i + (m - kCenterY);
+					jj = j + (n - kCenterX);
+
+					// ignore input samples which are out of bounds
+					if (ii >= 0 && ii < frame->getHeight() && jj >= 0 && jj < frame->getWidth()){
+						Macroblock MB = frame->getMacroblock(jj/16 + ii/16*frame->getWidth());
+						filtered[i][j] += 
+					}
+
+				}
+			}
+		}
+	}
+	*/
+
+
 }
 
 
