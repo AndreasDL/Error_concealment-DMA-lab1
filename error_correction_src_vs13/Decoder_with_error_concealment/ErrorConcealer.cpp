@@ -104,9 +104,27 @@ void ErrorConcealer::conceal_spatial_1(Frame *frame)
 				MB_b = frame->getMacroblock(MBx + frame->getWidth());
 			}
 
-			//Spatial interpolate pixels
+			//Spatial interpolate pixels using only the two closest pixels
+			//luma vals 16 per macroblock
 			for (int i = 0; i < 16; ++i)	{
-				for (int j = 0; j < 16; ++j)		{
+				for (int j = 0; j < 16; ++j) {
+					
+					// To easily make sure we only use 2 blocks, we will say only 2 blocks exist (the 2 closest blocks).
+					if (i >= 8){ //use bottom
+						exist_b = 1;
+						exist_t = 0;
+					}else{ //use top
+						exist_b = 0;
+						exist_t = 1;
+					}
+					if (j >= 8){ //use right
+						exist_r = 1;
+						exist_l = 0;
+					}else{ //use left
+						exist_r = 0;
+						exist_l = 1;
+					}
+
 					MB->luma[i][j] = ((17 - j - 1)*MB_l->luma[i][15] * exist_l + 
 						(j + 1)*MB_r->luma[i][0] * exist_r + 
 						(17 - i - 1)*MB_t->luma[15][j] * exist_t + 
@@ -119,8 +137,28 @@ void ErrorConcealer::conceal_spatial_1(Frame *frame)
 						);					
 				}
 			}
+
+			//cb & cr -> 8 values per block
 			for (int i = 0; i < 8; ++i)	{
-				for (int j = 0; j < 8; ++j)		{
+				for (int j = 0; j < 8; ++j)	{
+					// To easily make sure we only use 2 blocks, we will say only 2 blocks exist (the 2 closest blocks).
+					if (i >= 4){ //use bottom
+						exist_b = 1;
+						exist_t = 0;
+					}
+					else{ //use top
+						exist_b = 0;
+						exist_t = 1;
+					}
+					if (j >= 4){ //use right
+						exist_r = 1;
+						exist_l = 0;
+					}
+					else{ //use left
+						exist_r = 0;
+						exist_l = 1;
+					}
+
 					MB->cb[i][j] = ((9 - j - 1)*MB_l->cb[i][7] + 
 						(j + 1)*MB_r->cb[i][0] + 
 						(9 - i - 1)*MB_t->cb[7][j] + 
