@@ -304,6 +304,7 @@ void f(Macroblock* MB,
 
 void ErrorConcealer::conceal_spatial_2(Frame *frame)
 {
+	//init
 	int numMB = frame->getNumMB();
 	Macroblock* MB;
 	int exist_t = 1;
@@ -314,6 +315,8 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame)
 	int MBsConcealedL1L2 = 1;
 	int nrOfMBsMissing = 0;
 	int totalConcealed = 0;
+
+	//get states for each macro block
 	MBSTATE* MBstate = new MBSTATE[numMB];
 	for (int MBx = 0; MBx < numMB; ++MBx){
 		if (frame->getMacroblock(MBx)->isMissing()){
@@ -324,6 +327,8 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame)
 			MBstate[MBx] = OK;
 		}
 	}
+
+	//conceal multiple
 	int loop = 0;
 	while (nrOfMBsMissing > 0){
 
@@ -333,17 +338,14 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame)
 			MBsConcealedL1L2 = 0;
 			while (MBsConcealedL1 > 0){
 				MBsConcealedL1 = 0;
-				for (int MBx = 0; MBx < numMB; ++MBx)
-				{
+				for (int MBx = 0; MBx < numMB; ++MBx){
 					MB = frame->getMacroblock(MBx);
 					exist_t = 1;
 					exist_b = 1;
 					exist_r = 1;
 					exist_l = 1;
-					if (MBstate[MBx] == MISSING)
-					{
-						f( MB, &exist_l,  &exist_r,  &exist_t,  &exist_b, 
-							MBstate,MBx,frame);
+					if (MBstate[MBx] == MISSING){
+						f( MB, &exist_l,  &exist_r,  &exist_t,  &exist_b, MBstate,MBx,frame);
 						if (exist_l + exist_r + exist_t + exist_b > 2){
 							MB->setConcealed();
 							++MBsConcealedL1;
@@ -362,8 +364,7 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame)
 				}
 			}
 			bool oneMBConcealed = false;
-			for (int MBx = 0; MBx < numMB && !oneMBConcealed; ++MBx)
-			{
+			for (int MBx = 0; MBx < numMB && !oneMBConcealed; ++MBx){
 				MB = frame->getMacroblock(MBx);
 				exist_t = 1;
 				exist_b = 1;
@@ -389,10 +390,12 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame)
 					MBstate[MBx] = OK;						
 				}					
 			}
-		}		
+		}	
+
+
+		//conceal singles
 		bool oneMBConcealed = false;
-		for (int MBx = 0; MBx < numMB && !oneMBConcealed; ++MBx)
-		{
+		for (int MBx = 0; MBx < numMB && !oneMBConcealed; ++MBx){
 			MB = frame->getMacroblock(MBx);
 			exist_t = 1;
 			exist_b = 1;
@@ -428,6 +431,7 @@ void ErrorConcealer::conceal_spatial_3(Frame *frame)
 
 void ErrorConcealer::conceal_temporal_1(Frame *frame, Frame *referenceFrame)
 {
+	//block missing? use previous block (assume no motion in block)
 	int numMB = frame->getNumMB();
 	for (int MBx = 0; MBx < numMB; ++MBx){
 		if (frame->getMacroblock(MBx)->isMissing()){
