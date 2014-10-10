@@ -49,6 +49,7 @@ void ErrorConcealer::concealErrors(Frame *frame, Frame *referenceFrame)
 	}
 }
 
+//No adjacent blocks missing, use interpolate with the 2 closest pixels to solve this.
 void ErrorConcealer::conceal_spatial_1(Frame *frame)
 {
 	int numMB = frame->getNumMB();
@@ -190,28 +191,29 @@ void ErrorConcealer::conceal_spatial_1(Frame *frame)
 
 
 enum MBSTATE { OK, MISSING, CONCEALED };
-
+//fix method for conceal_spatial_2
 void f(Macroblock* MB, 
 	   int* exist_l, int* exist_r, int* exist_t, int* exist_b, 
 	   MBSTATE* MBstate, 
 	   int MBx, 
 	   Frame *frame){
+		   
+			//What block DO we have?
 		   Macroblock* MB_l ;
 		   Macroblock* MB_r ;
 		   Macroblock* MB_t ;
 		   Macroblock* MB_b ;
 		   MacroblockEmpty* MBEmpty = new MacroblockEmpty();
+
 		   //determine MB_l
-		   if (MB->getXPos() == 0){
+		   if (MB->getXPos() == 0){//at the left border => left is always missing
 			   MB_l = MBEmpty;
 			   *exist_l = 0;
-		   }
-		   else{
-			   if (MBstate[MBx - 1] == MISSING){
+		   }else{
+			   if (MBstate[MBx - 1] == MISSING){//left one is missing
 				   MB_l = MBEmpty;
 				   *exist_l = 0;
-			   }
-			   else{
+			   }else{ //left one is not missing
 				   MB_l = frame->getMacroblock(MBx - 1);
 			   }
 		   }
@@ -219,13 +221,11 @@ void f(Macroblock* MB,
 		   if (MB->getXPos() == frame->getWidth() - 1){
 			   MB_r = MBEmpty;
 			   *exist_r = 0;
-		   }
-		   else{
+		   }else{
 			   if (MBstate[MBx + 1] == MISSING){
 				   MB_r = MBEmpty;
 				   *exist_r = 0;
-			   }
-			   else{
+			   }else{
 				   MB_r = frame->getMacroblock(MBx + 1);
 			   }
 		   }
@@ -233,13 +233,11 @@ void f(Macroblock* MB,
 		   if (MB->getYPos() == 0){
 			   MB_t = MBEmpty;
 			   *exist_t = 0;
-		   }
-		   else{
+		   }else{
 			   if (MBstate[MBx - frame->getWidth()] == MISSING){
 				   MB_t = MBEmpty;
 				   *exist_t = 0;
-			   }
-			   else{
+			   }else{
 				   MB_t = frame->getMacroblock(MBx - frame->getWidth());
 			   }
 		   }
@@ -247,17 +245,15 @@ void f(Macroblock* MB,
 		   if (MB->getYPos() == frame->getHeight() - 1){
 			   MB_b = MBEmpty;
 			   *exist_b = 0;
-		   }
-		   else{
+		   }else{
 			   if (MBstate[MBx + frame->getWidth()] == MISSING){
 				   MB_b = MBEmpty;
 				   *exist_b = 0;
-			   }
-			   else{
+			   }else{
 				   MB_b = frame->getMacroblock(MBx + frame->getWidth());
 			   }
 		   }
-
+		   //interpolate between existing blocks
 		   if (*exist_l + *exist_r + *exist_t + *exist_b > 0){
 			   //Spatial interpolate pixels
 			   for (int i = 0; i < 16; ++i)	{
@@ -301,7 +297,7 @@ void f(Macroblock* MB,
 		   }
 		   delete MBEmpty;
 }
-
+//can fix even if adjacent blocks are missing
 void ErrorConcealer::conceal_spatial_2(Frame *frame)
 {
 	//init
@@ -424,11 +420,13 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame)
 	}
 }
 
+//uses edge information
 void ErrorConcealer::conceal_spatial_3(Frame *frame)
 {
+
 }
 
-
+//zero motion temporal reconstruction=> block missing? = use previous block
 void ErrorConcealer::conceal_temporal_1(Frame *frame, Frame *referenceFrame)
 {
 	//block missing? use previous block (assume no motion in block)
@@ -448,8 +446,9 @@ void ErrorConcealer::conceal_temporal_1(Frame *frame, Frame *referenceFrame)
 	}
 }
 
-enum MBPOSITION { NONE, TOP, BOTTOM, LEFT, RIGHT , SPATIAL};
 
+enum MBPOSITION { NONE, TOP, BOTTOM, LEFT, RIGHT , SPATIAL};
+//getters
 pixel getYPixel(Frame *frame, int posx, int posy){
 	int MBx = (int(posy/16) * frame->getWidth() ) ;
 	MBx += (int(posx/16));
@@ -457,7 +456,6 @@ pixel getYPixel(Frame *frame, int posx, int posy){
 	pixel luma = MB->luma[posy%16][posx%16];
 	return luma;	
 }
-
 pixel getCbPixel(Frame *frame, int posx, int posy){
 	int MBx = (int(posy/8) * frame->getWidth() ) ;
 	MBx += (int(posx/8));
@@ -465,8 +463,6 @@ pixel getCbPixel(Frame *frame, int posx, int posy){
 	pixel cb = MB->cb[posy%8][posx%8];
 	return cb;	
 }
-
-
 pixel getCrPixel(Frame *frame, int posx, int posy){
 	int MBx = (int(posy/8) * frame->getWidth() ) ;
 	MBx += (int(posx/8));
@@ -475,7 +471,7 @@ pixel getCrPixel(Frame *frame, int posx, int posy){
 	return cr;	
 }
 
-
+//Fill MB based on usedMB
 void FillMB(Macroblock *MB, Macroblock *usedMB, Frame *frame, Frame *referenceFrame){
 	int MBxpos = MB->getXPos();
 	int MBypos = MB->getYPos();
@@ -498,11 +494,13 @@ void FillMB(Macroblock *MB, Macroblock *usedMB, Frame *frame, Frame *referenceFr
 	}
 }
 
+//how much does the edge of MB differ from usedMB ?
 float CheckMB(Macroblock *MB, Macroblock *usedMB, Frame *frame, int MBx){
 	int verschil = 0;
 	int aantalvglnpixels = 0;
 	int MBxpos = MB->getXPos() * 16;
-	int MBypos = MB->getYPos() * 16;				
+	int MBypos = MB->getYPos() * 16;		
+
 	for (int t = 0; t < 16; ++t){
 		if (MB->getYPos() != 0){
 			verschil += abs(MB->luma[0][t] - frame->getMacroblock(MBx - frame->getWidth())->luma[15][t]);
@@ -521,6 +519,7 @@ float CheckMB(Macroblock *MB, Macroblock *usedMB, Frame *frame, int MBx){
 			++aantalvglnpixels;
 		}
 	}
+
 	float errorperpixel = float(verschil)/aantalvglnpixels;
 	return errorperpixel;
 }
@@ -528,17 +527,22 @@ float CheckMB(Macroblock *MB, Macroblock *usedMB, Frame *frame, int MBx){
 void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int size)
 {
 // Sub-macroblock size to be completed. Add explanatory notes in English.
+
 	if(!frame->is_p_frame()){
+		//if the frame is not Predictibely coded (we should have the whole frame), then we conceal using the spacial method instead.
 		conceal_spatial_2(frame);
-	}
-	else{
+	}else{
 		float error = 99999999;
 		MBPOSITION bestResult = NONE;
+
 		int numMB = frame->getNumMB();
 		Macroblock *usedMB; //MB in same frame, used for MV (TOP, BOTTOM,...)
+
 		for (int MBx = 0; MBx < numMB; ++MBx){
 			if (frame->getMacroblock(MBx)->isMissing()){
 				Macroblock *MB = frame->getMacroblock(MBx);
+
+				//get best matching block
 				//check TOP 
 				if (MB->getYPos() != 0){
 					usedMB = frame->getMacroblock(MBx - frame->getWidth());
@@ -580,6 +584,7 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int
 					}
 				}
 
+				//what block is best matching? -> use motion vector from that block
 				switch (bestResult){
 				case TOP:
 					usedMB = frame->getMacroblock(MBx - frame->getWidth());
@@ -774,7 +779,6 @@ float CheckMB_temporal_3(Macroblock *MB,Macroblock *tempMB, Frame *frame, int MB
 	float errorperpixel = float(verschil)/aantalvglnpixels;
 	return errorperpixel;
 }
-
 void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame)
 {
 	conceal_spatial_2_zonder_setConcealed(frame);
