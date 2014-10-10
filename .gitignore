@@ -67,6 +67,7 @@ packages/
 #Test files
 *.testsettings
 
-
+data/*
+solutions/*
 *.yuv
 *.enc
