@@ -28,16 +28,16 @@ void ErrorConcealer::concealErrors(Frame *frame, Frame *referenceFrame)
 			conceal_temporal_1(frame, referenceFrame);
 			break;
 		case 4:
-			conceal_temporal_2(frame, referenceFrame, 2);//changed to match the correct numbers of page 25 in assignement.pdf
+			conceal_temporal_2(frame, referenceFrame, 1);
 			break;
 		case 5:
-			conceal_temporal_2(frame, referenceFrame, 4);
+			conceal_temporal_2(frame, referenceFrame, 2);
 			break;
 		case 6:
-			conceal_temporal_2(frame, referenceFrame, 8);
+			conceal_temporal_2(frame, referenceFrame, 3);
 			break;
 		case 7:
-			conceal_temporal_2(frame, referenceFrame, 16);
+			conceal_temporal_2(frame, referenceFrame, 4);
 			break;
 		case 8:
 			conceal_temporal_3(frame, referenceFrame);
@@ -449,75 +449,73 @@ void ErrorConcealer::conceal_temporal_1(Frame *frame, Frame *referenceFrame)
 
 enum MBPOSITION { NONE, TOP, BOTTOM, LEFT, RIGHT , SPATIAL};
 //getters
-pixel getYPixel(Frame *frame, int posx, int posy, int size){
-	int MBx = (int(posy/size) * frame->getWidth() ) ;
-	MBx += (int(posx/size));
+pixel getYPixel(Frame *frame, int posx, int posy){
+	int MBx = (int(posy/16) * frame->getWidth() ) ;
+	MBx += (int(posx/16));
 	Macroblock *MB = frame->getMacroblock(MBx);
-	pixel luma = MB->luma[posy%size][posx%size];
+	pixel luma = MB->luma[posy%16][posx%16];
 	return luma;	
 }
-// Note !! luma = 16 vals cb & cr only 8 !!
-pixel getCbPixel(Frame *frame, int posx, int posy, int size){
-	int MBx = (int(posy/size) * frame->getWidth() ) ;
-	MBx += (int(posx/size));
+pixel getCbPixel(Frame *frame, int posx, int posy){
+	int MBx = (int(posy/8) * frame->getWidth() ) ;
+	MBx += (int(posx/8));
 	Macroblock *MB = frame->getMacroblock(MBx);
-	pixel cb = MB->cb[posy%size][posx%size];
+	pixel cb = MB->cb[posy%8][posx%8];
 	return cb;	
 }
-// Note !! luma = 16 vals cb & cr only 8 !!
-pixel getCrPixel(Frame *frame, int posx, int posy, int size){
-	int MBx = (int(posy/size) * frame->getWidth() ) ;
-	MBx += (int(posx/size));
+pixel getCrPixel(Frame *frame, int posx, int posy){
+	int MBx = (int(posy/8) * frame->getWidth() ) ;
+	MBx += (int(posx/8));
 	Macroblock *MB = frame->getMacroblock(MBx);
-	pixel cr = MB->cr[posy%size][posx%size];
+	pixel cr = MB->cr[posy%8][posx%8];
 	return cr;	
 }
 
 //Fill MB based on usedMB
-void FillMB(Macroblock *MB, Macroblock *usedMB, Frame *frame, Frame *referenceFrame, int size){
+void FillMB(Macroblock *MB, Macroblock *usedMB, Frame *frame, Frame *referenceFrame){
 	int MBxpos = MB->getXPos();
 	int MBypos = MB->getYPos();
-	for (int i = 0; i < size; ++i){
-		for (int j = 0; j < size; ++j){
-			int xposref = (MBxpos*size) + j + usedMB->mv.x;
-			int yposref = (MBypos*size) + i + usedMB->mv.y;
+	for (int i = 0; i < 16; ++i){
+		for (int j = 0; j < 16; ++j){
+			int xposref = (MBxpos*16) + j + usedMB->mv.x;
+			int yposref = (MBypos*16) + i + usedMB->mv.y;
 			if(xposref < 0)
 				xposref = 0;
-			if(xposref > (frame->getWidth() * (size - 1)) )
-				xposref = (frame->getWidth() * (size - 1) );
+			if(xposref > (frame->getWidth() * 16 - 1))
+				xposref = (frame->getWidth() * 16 - 1);
 			if(yposref < 0)
 				yposref = 0;
-			if(yposref > (frame->getHeight() * (size - 1)) )
-				yposref = (frame->getHeight() * (size - 1) );
-			MB->luma[i][j] = getYPixel(referenceFrame, xposref, yposref, size);
-			MB->cb[i/2][j/2] = getCbPixel(referenceFrame, xposref/2, yposref/2, size/2);
-			MB->cr[i/2][j/2] = getCrPixel(referenceFrame, xposref/2, yposref/2, size/2);
+			if(yposref > (frame->getHeight() * 16 - 1))
+				yposref = (frame->getHeight() * 16 - 1);
+			MB->luma[i][j] = getYPixel(referenceFrame, xposref, yposref);
+			MB->cb[i/2][j/2] = getCbPixel(referenceFrame, xposref/2, yposref/2);
+			MB->cr[i/2][j/2] = getCrPixel(referenceFrame, xposref/2, yposref/2);
 		}
 	}
 }
 
 //how much does the edge of MB differ from usedMB ?
-float CheckMB(Macroblock *MB, Macroblock *usedMB, Frame *frame, int MBx,int size){
+float CheckMB(Macroblock *MB, Macroblock *usedMB, Frame *frame, int MBx){
 	int verschil = 0;
 	int aantalvglnpixels = 0;
-	int MBxpos = MB->getXPos() * size;
-	int MBypos = MB->getYPos() * size;		
+	int MBxpos = MB->getXPos() * 16;
+	int MBypos = MB->getYPos() * 16;		
 
-	for (int t = 0; t < size; ++t){
+	for (int t = 0; t < 16; ++t){
 		if (MB->getYPos() != 0){
-			verschil += abs(MB->luma[0][t] - frame->getMacroblock(MBx - frame->getWidth())->luma[size-1][t]);
+			verschil += abs(MB->luma[0][t] - frame->getMacroblock(MBx - frame->getWidth())->luma[15][t]);
 			++aantalvglnpixels;
 		}
 		if (MB->getYPos() != (frame->getHeight() - 1)){
-			verschil += abs(MB->luma[size-1][t] - frame->getMacroblock(MBx + frame->getWidth())->luma[0][t]);
+			verschil += abs(MB->luma[15][t] - frame->getMacroblock(MBx + frame->getWidth())->luma[0][t]);
 			++aantalvglnpixels;
 		}
 		if (MB->getXPos() != 0){
-			verschil += abs(MB->luma[t][0] - frame->getMacroblock(MBx - 1)->luma[t][size-1]);
+			verschil += abs(MB->luma[t][0] - frame->getMacroblock(MBx - 1)->luma[t][15]);
 			++aantalvglnpixels;
 		}
 		if (MB->getXPos() != (frame->getWidth() - 1)){
-			verschil += abs(MB->luma[t][size-1] - frame->getMacroblock(MBx + 1)->luma[t][0]);
+			verschil += abs(MB->luma[t][15] - frame->getMacroblock(MBx + 1)->luma[t][0]);
 			++aantalvglnpixels;
 		}
 	}
@@ -548,8 +546,8 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int
 				//check TOP 
 				if (MB->getYPos() != 0){
 					usedMB = frame->getMacroblock(MBx - frame->getWidth());
-					FillMB(MB, usedMB, frame, referenceFrame, size);
-					float errorperpixel = CheckMB(MB, usedMB, frame, MBx, size);
+					FillMB(MB, usedMB, frame, referenceFrame);
+					float errorperpixel = CheckMB(MB, usedMB, frame, MBx);
 					if(errorperpixel < error){
 						error = errorperpixel;
 						bestResult = TOP;
@@ -558,8 +556,8 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int
 				//check BOTTOM 
 				if (MB->getYPos() != (frame->getHeight() - 1)){
 					usedMB = frame->getMacroblock(MBx + frame->getWidth());
-					FillMB(MB, usedMB, frame, referenceFrame, size);
-					float errorperpixel = CheckMB(MB, usedMB, frame, MBx, size);
+					FillMB(MB, usedMB, frame, referenceFrame);
+					float errorperpixel = CheckMB(MB, usedMB, frame, MBx);
 					if(errorperpixel < error){
 						error = errorperpixel;
 						bestResult = BOTTOM;
@@ -568,8 +566,8 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int
 				//check LEFT 
 				if (MB->getXPos() != 0){
 					usedMB = frame->getMacroblock(MBx - 1);
-					FillMB(MB, usedMB, frame, referenceFrame, size);
-					float errorperpixel = CheckMB(MB, usedMB, frame, MBx, size);
+					FillMB(MB, usedMB, frame, referenceFrame);
+					float errorperpixel = CheckMB(MB, usedMB, frame, MBx);
 					if(errorperpixel < error){
 						error = errorperpixel;
 						bestResult = LEFT;
@@ -578,8 +576,8 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int
 				//check RIGHT 
 				if (MB->getXPos() != (frame->getWidth() - 1)){
 					usedMB = frame->getMacroblock(MBx + 1);
-					FillMB(MB, usedMB, frame, referenceFrame, size);
-					float errorperpixel = CheckMB(MB, usedMB, frame, MBx, size);
+					FillMB(MB, usedMB, frame, referenceFrame);
+					float errorperpixel = CheckMB(MB, usedMB, frame, MBx);
 					if(errorperpixel < error){
 						error = errorperpixel;
 						bestResult = RIGHT;
@@ -590,22 +588,22 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int
 				switch (bestResult){
 				case TOP:
 					usedMB = frame->getMacroblock(MBx - frame->getWidth());
-					FillMB(MB, usedMB, frame, referenceFrame, size);
+					FillMB(MB, usedMB, frame, referenceFrame);
 					printf("T");
 					break;
 				case BOTTOM:
 					usedMB = frame->getMacroblock(MBx + frame->getWidth());
-					FillMB(MB, usedMB, frame, referenceFrame, size);
+					FillMB(MB, usedMB, frame, referenceFrame);
 					printf("B");
 					break;
 				case LEFT:
 					usedMB = frame->getMacroblock(MBx - 1);
-					FillMB(MB, usedMB, frame, referenceFrame, size);
+					FillMB(MB, usedMB, frame, referenceFrame);
 					printf("L");
 					break;
 				case RIGHT:
 					usedMB = frame->getMacroblock(MBx + 1);
-					FillMB(MB, usedMB, frame, referenceFrame, size);
+					FillMB(MB, usedMB, frame, referenceFrame);
 					printf("R");
 					break;				
 				}
@@ -749,9 +747,9 @@ void FillMB_temporal_3(Macroblock *MB, Macroblock *tempMB, Macroblock *usedMB, F
 				yposref = 0;
 			if(yposref > (frame->getHeight() * 16 - 1))
 				yposref = (frame->getHeight() * 16 - 1);
-			tempMB->luma[i][j] = getYPixel(referenceFrame, xposref, yposref, 16);
-			tempMB->cb[i/2][j/2] = getCbPixel(referenceFrame, xposref/2, yposref/2, 8);
-			tempMB->cr[i/2][j/2] = getCrPixel(referenceFrame, xposref/2, yposref/2, 8);
+			tempMB->luma[i][j] = getYPixel(referenceFrame, xposref, yposref);
+			tempMB->cb[i/2][j/2] = getCbPixel(referenceFrame, xposref/2, yposref/2);
+			tempMB->cr[i/2][j/2] = getCrPixel(referenceFrame, xposref/2, yposref/2);
 		}
 	}
 }
@@ -783,7 +781,6 @@ float CheckMB_temporal_3(Macroblock *MB,Macroblock *tempMB, Frame *frame, int MB
 }
 void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame)
 {
-	int size = 16; //added for 2B
 	conceal_spatial_2_zonder_setConcealed(frame);
 	float error = 99999999;
 	MBPOSITION bestResult = NONE;
@@ -841,22 +838,22 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame)
 			switch (bestResult){
 				case TOP:
 					usedMB = frame->getMacroblock(MBx - frame->getWidth());
-					FillMB(MB, usedMB, frame, referenceFrame, size);
+					FillMB(MB, usedMB, frame, referenceFrame);
 					printf("T");
 					break;
 				case BOTTOM:
 					usedMB = frame->getMacroblock(MBx + frame->getWidth());
-					FillMB(MB, usedMB, frame, referenceFrame,size);
+					FillMB(MB, usedMB, frame, referenceFrame);
 					printf("B");
 					break;
 				case LEFT:
 					usedMB = frame->getMacroblock(MBx - 1);
-					FillMB(MB, usedMB, frame, referenceFrame,size);
+					FillMB(MB, usedMB, frame, referenceFrame);
 					printf("L");
 					break;
 				case RIGHT:
 					usedMB = frame->getMacroblock(MBx + 1);
-					FillMB(MB, usedMB, frame, referenceFrame,size);
+					FillMB(MB, usedMB, frame, referenceFrame);
 					printf("R");
 					break;	
 				case SPATIAL:
