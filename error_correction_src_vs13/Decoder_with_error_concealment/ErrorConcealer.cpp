@@ -1,6 +1,7 @@
 #include "ErrorConcealer.h"
 #include "MacroblockEmpty.h"
 #include <stdio.h>
+#include <iostream>
 #include <math.h>
 
 ErrorConcealer::ErrorConcealer(short conceal_method)
@@ -406,15 +407,17 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame)
 
 void ErrorConcealer::conceal_spatial_3(Frame *frame)
 {
-	int kernel_x[3][3] = { { -1, 0, 1 }, { -2, 0, 2 }, { -1, 0, 1 } };
-	int kernel_y[3][3] = { { 1, 2, 1 }, { 0, 0, 0 }, { -1, -2, -1 } };
+	double kernel_x[3][3] = { { -1, 0, 1 }, { -2, 0, 2 }, { -1, 0, 1 } };
+	double kernel_y[3][3] = { { 1, 2, 1 }, { 0, 0, 0 }, { -1, -2, -1 } };
 
-	int numMB_hor = frame->getWidth() / 16;
-	int numMB_ver = frame->getHeight() / 16;
+	int numMB_hor = frame->getWidth();
+	int numMB_ver = frame->getHeight();
 
 	for (int i = 0; i < frame->getNumMB(); i++){
 		Macroblock *MB = frame->getMacroblock(i);
 		if (MB->isMissing()){
+
+			//std::cout << MB->getMBNum() << std::endl;
 
 			////////////////////////////////////////////////////////////////////////////////
 			///// 1. Determine whether or not the MB's around the missing MB are available.
@@ -424,36 +427,54 @@ void ErrorConcealer::conceal_spatial_3(Frame *frame)
 			int exist_t = 1, exist_b = 1, exist_l = 1, exist_r = 1;
 
 			// Determine upper macroblock
-			if (i >= numMB_hor && !frame->getMacroblock(i - numMB_hor)->isMissing()){	// For having an upper MB we should at least be on the second row, and the MB above may not be missing.
+			if (MB->getYPos() != 0 && !frame->getMacroblock(i - numMB_hor)->isMissing()){	// For having an upper MB we should at least be on the second row, and the MB above may not be missing.
 				MB_t = frame->getMacroblock(i - numMB_hor);
 			}
 			else {
 				exist_t = 0;
 			}
 
+			//printf("Top: %d \n", exist_t);
+
 			// Determine lower macroblock
-			if (i < frame->getNumMB()-numMB_hor && !frame->getMacroblock(i + numMB_hor)->isMissing()){	// For having a lower MB we may not be on the last row, and the lower MB may not be missing.
+			if (MB->getYPos() != frame->getHeight()-1 && !frame->getMacroblock(i + numMB_hor)->isMissing()){	// For having a lower MB we may not be on the last row, and the lower MB may not be missing.
 				MB_b = frame->getMacroblock(i + numMB_hor);
 			}
 			else {
 				exist_b = 0;
 			}
 
+			//printf("Bottom: %d \n", exist_b);
+
+			if (i == 993){
+				std::cout << "993 is missing" << std::endl;
+			}
 			// Determine left macroblock
-			if (i % numMB_hor != 0 && !frame->getMacroblock(i - 1)->isMissing()){	// For having a left MB we may not be in the left column, and the left MB may not be missing.
+			if (MB->getXPos() != 0 && !(frame->getMacroblock(i - 1)->isMissing())){	// For having a left MB we may not be in the left column, and the left MB may not be missing.
 				MB_l = frame->getMacroblock(i - 1);
+
+				if (i == 993){
+					std::cout << "but left exists." << std::endl;
+				}
 			}
 			else {
 				exist_l = 0;
+				if (i == 993){
+					std::cout << "but left doesn't exist" << std::endl;
+				}
 			}
 
+			//printf("Left: %d \n", exist_l);
+
 			// Determine right macroblock
-			if (i % numMB_hor != numMB_hor - 1 && !frame->getMacroblock(i - numMB_hor)->isMissing()){	// For having a right MB we may not be in the right column, and the right MB may not be missing. 
-				MB_r = frame->getMacroblock(i - numMB_hor);
+			if (MB->getXPos() != frame->getWidth()-1 && !frame->getMacroblock(i+1)->isMissing()){// && frame->getMacroblock(i+1)->state == 0){	// For having a right MB we may not be in the right column, and the right MB may not be missing. 
+				MB_r = frame->getMacroblock(i + 1);
 			}
 			else {
 				exist_r = 0;
 			}
+
+			//printf("CHECK0");
 
 			////////////////////////////////////////////////////////////////////////////////
 			///// 2. Extract edge data by using horizontal and vertical Sobel operator.
@@ -485,12 +506,11 @@ void ErrorConcealer::conceal_spatial_3(Frame *frame)
 
 			//// Edge gradients and slopes will be stored the following order: top, right, bottom, left
 
-			int counter = 1;	// This counter will keep track of the position in the gradients and slopes array.
+			int counter = 0;	// This counter will keep track of the position in the gradients and slopes array.
 
-			//// Calculate gradients and slope for top
+			// Calculate gradients and slope for top
 			if (exist_t == 1){
-				for (int j = counter; j < counter+14; j++){
-
+				for (int j = 1; j < 15; j++) {
 					double gradient_x = MB_t->luma[13][j - 1] * kernel_x[0][0] + MB_t->luma[13][j] * kernel_x[0][1] + MB_t->luma[13][j + 1] * kernel_x[0][2]
 						+ MB_t->luma[14][j - 1] * kernel_x[1][0] + MB_t->luma[14][j + 1] * kernel_x[1][2]
 						+ MB_t->luma[15][j - 1] * kernel_x[2][0] + MB_t->luma[15][j] * kernel_x[2][1] + MB_t->luma[15][j + 1] * kernel_x[2][2];
@@ -498,82 +518,202 @@ void ErrorConcealer::conceal_spatial_3(Frame *frame)
 					double gradient_y = MB_t->luma[13][j - 1] * kernel_y[0][0] + MB_t->luma[13][j] * kernel_y[0][1] + MB_t->luma[13][j + 1] * kernel_y[0][2]
 						+ MB_t->luma[14][j - 1] * kernel_y[1][0] + MB_t->luma[14][j + 1] * kernel_y[1][2]
 						+ MB_t->luma[15][j - 1] * kernel_y[2][0] + MB_t->luma[15][j] * kernel_y[2][1] + MB_t->luma[15][j + 1] * kernel_y[2][2];
+					
+					gradient_x /= 4.0;
+					gradient_y /= 4.0;
 
-					gradients[j - 1] = pow((pow(gradient_x, 2) + pow(gradient_y, 2)), 1 / 2);
-					slopes[j - 1] = 1 / tan(gradient_y / gradient_x);
+					// When gradient_y = 0, we will divide by zero during the slope calculation. To avoid this, we set both gradient_x and gradient_y
+					// to zero. During the calculation of the dominant direction, these values will be filtered (has to be > variance).
+					
+					//std::cout << "x: " << gradient_x << " / y: " << gradient_y << std::endl;
+					//std::cout << "Gradient top: " << pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0) << " / Slope: " << 1.0 / tan(gradient_y / gradient_x) << std::endl;
+
+					if (gradient_y != 0){
+						//std::cout << pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0) << "+++" << 1.0 / tan(gradient_y / gradient_x) << std::endl;
+						gradients[j - 1 + counter] = pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0);
+						slopes[j - 1 + counter] = 1.0 / tan(gradient_y / gradient_x);
+					} else {
+						gradients[j - 1 + counter] = 0;
+						slopes[j - 1 + counter] = 0;
+					}
 				}
 				counter += 14;
 			}
+
+			//printf("Top: %d \n", exist_t);
 			
-			//// Calculate gradients and slope for right
-			//if (exist_r == 1){
-			//	for (int j = counter; j < counter + 14; j++){
-			//		double gradient_x = MB_r->luma[j - 1][0] * kernel_x[0][0] + MB_r->luma[j - 1][1] * kernel_x[0][1] + MB_r->luma[j - 1][2] * kernel_x[0][2]
-			//			+ MB_r->luma[j][0] * kernel_x[1][0] + MB_r->luma[j][2] * kernel_x[1][2]
-			//			+ MB_r->luma[j + 1][0] * kernel_x[2][0] + MB_r->luma[j + 1][1] * kernel_x[2][1] + MB_r->luma[j + 1][2] * kernel_x[2][2];
+			// Calculate gradients and slope for right
+			if (exist_r == 1){
+				for (int j = 1; j < 15; j++){
+					//printf("Hoera");
+					//printf("Joepiejee: %d \n", MB_r->isMissing());
 
-			//		double gradient_y = MB_r->luma[j - 1][0] * kernel_y[0][0] + MB_r->luma[j - 1][1] * kernel_y[0][1] + MB_r->luma[j - 1][2] * kernel_y[0][2]
-			//			+ MB_r->luma[j][0] * kernel_y[1][0] + MB_r->luma[j][2] * kernel_y[1][2]
-			//			+ MB_r->luma[j + 1][0] * kernel_y[2][0] + MB_r->luma[j + 1][1] * kernel_y[2][1] + MB_r->luma[j + 1][2] * kernel_y[2][2];
+					//printf("Joepiejee: %u \n", MB_r->state);
 
-			//		gradients[j - 1] = pow((pow(gradient_x, 2) + pow(gradient_y, 2)), 1 / 2);
-			//		slopes[j - 1] = 1 / tan(gradient_y / gradient_x);
-			//	}
-			//	counter += 14;
+					//int test = MB_r->luma[j - 1][0] * kernel_x[0][0];
+					//printf("Hoera");
+
+					double gradient_x = MB_r->luma[j - 1][0] * kernel_x[0][0] + MB_r->luma[j - 1][1] * kernel_x[0][1] + MB_r->luma[j - 1][2] * kernel_x[0][2]
+						+ MB_r->luma[j][0] * kernel_x[1][0] + MB_r->luma[j][2] * kernel_x[1][2]
+						+ MB_r->luma[j + 1][0] * kernel_x[2][0] + MB_r->luma[j + 1][1] * kernel_x[2][1] + MB_r->luma[j + 1][2] * kernel_x[2][2];
+					double gradient_y = MB_r->luma[j - 1][0] * kernel_y[0][0] + MB_r->luma[j - 1][1] * kernel_y[0][1] + MB_r->luma[j - 1][2] * kernel_y[0][2]
+						+ MB_r->luma[j][0] * kernel_y[1][0] + MB_r->luma[j][2] * kernel_y[1][2]
+						+ MB_r->luma[j + 1][0] * kernel_y[2][0] + MB_r->luma[j + 1][1] * kernel_y[2][1] + MB_r->luma[j + 1][2] * kernel_y[2][2];
+
+					gradient_x /= 4.0;
+					gradient_y /= 4.0;
+
+
+					//std::cout << "x: " << gradient_x << " / y: " << gradient_y << std::endl;
+					//std::cout << "Gradient right: " << pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0) << " / Slope: " << 1.0 / tan(gradient_y / gradient_x) << std::endl;
+
+					// When gradient_y = 0, we will divide by zero during the slope calculation. To avoid this, we set both gradient_x and gradient_y
+					// to zero. During the calculation of the dominant direction, these values will be filtered (has to be > variance).
+					if (gradient_y != 0){
+						//std::cout << pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0) << "+++" << 1.0 / tan(gradient_y / gradient_x) << std::endl;
+						gradients[j - 1 + counter] = pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0);
+						slopes[j - 1 + counter] = 1.0 / tan(gradient_y / gradient_x);
+					}
+					else {
+						gradients[j - 1 + counter] = 0;
+						slopes[j - 1 + counter] = 0;
+					}
+
+				}
+				counter += 14;
+			}
+
+
+			//printf("Right: %d \n", exist_r);
+
+			// Calculate gradients and slope for bottom
+			if (exist_b == 1){
+				for (int j = 1; j < 15; j++){
+
+					double gradient_x = MB_b->luma[0][j - 1] * kernel_x[0][0] + MB_b->luma[0][j] * kernel_x[0][1] + MB_b->luma[0][j + 1] * kernel_x[0][2]
+						+ MB_b->luma[1][j - 1] * kernel_x[1][0] + MB_b->luma[1][j + 1] * kernel_x[1][2]
+						+ MB_b->luma[2][j - 1] * kernel_x[2][0] + MB_b->luma[2][j] * kernel_x[2][1] + MB_b->luma[2][j + 1] * kernel_x[2][2];
+
+					double gradient_y = MB_b->luma[0][j - 1] * kernel_y[0][0] + MB_b->luma[0][j] * kernel_y[0][1] + MB_b->luma[0][j + 1] * kernel_y[0][2]
+						+ MB_b->luma[1][j - 1] * kernel_y[1][0] + MB_b->luma[1][j + 1] * kernel_y[1][2]
+						+ MB_b->luma[2][j - 1] * kernel_y[2][0] + MB_b->luma[2][j] * kernel_y[2][1] + MB_b->luma[2][j + 1] * kernel_y[2][2];
+
+					gradient_x /= 4.0;
+					gradient_y /= 4.0;
+
+
+					//std::cout << "x: " << gradient_x << " / y: " << gradient_y << std::endl;
+					//std::cout << "Gradient bottom: " << pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0) << " / Slope: " << 1.0 / tan(gradient_y / gradient_x) << std::endl;
+
+					// When gradient_y = 0, we will divide by zero during the slope calculation. To avoid this, we set both gradient_x and gradient_y
+					// to zero. During the calculation of the dominant direction, these values will be filtered (has to be > variance).
+					if (gradient_y != 0){
+						//std::cout << pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0) << "+++" << 1.0 / tan(gradient_y / gradient_x) << std::endl;
+						gradients[j - 1 + counter] = pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0);
+						slopes[j - 1 + counter] = 1.0 / tan(gradient_y / gradient_x);
+					}
+					else {
+						gradients[j - 1 + counter] = 0;
+						slopes[j - 1 + counter] = 0;
+					}
+				}
+				counter += 14;
+			}
+
+			//printf("Bottom: %d \n", exist_b);
+
+			// Calculate gradients and slope for left
+			if (exist_l == 1){
+				for (int j = 1; j < 15; j++){
+					double gradient_x = MB_l->luma[j - 1][13] * kernel_x[0][0] + MB_l->luma[j - 1][14] * kernel_x[0][1] + MB_l->luma[j - 1][15] * kernel_x[0][2]
+						+ MB_l->luma[j][13] * kernel_x[1][0] + MB_l->luma[j][15] * kernel_x[1][2]
+						+ MB_l->luma[j + 1][13] * kernel_x[2][0] + MB_l->luma[j + 1][14] * kernel_x[2][1] + MB_l->luma[j + 1][15] * kernel_x[2][2];
+
+					double gradient_y = MB_l->luma[j - 1][13] * kernel_y[0][0] + MB_l->luma[j - 1][14] * kernel_y[0][1] + MB_l->luma[j - 1][15] * kernel_y[0][2]
+						+ MB_l->luma[j][13] * kernel_y[1][0] + MB_l->luma[j][15] * kernel_y[1][2]
+						+ MB_l->luma[j + 1][13] * kernel_y[2][0] + MB_l->luma[j + 1][14] * kernel_y[2][1] + MB_l->luma[j + 1][15] * kernel_y[2][2];
+
+					gradient_x /= 4.0;
+					gradient_y /= 4.0;
+
+					//std::cout << "x: " << gradient_x << " / y: " << gradient_y << std::endl;
+					//std::cout << "Gradient left: " << pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0) <<" / Slope: " << 1.0 / tan(gradient_y / gradient_x) << std::endl;
+
+					// When gradient_y = 0, we will divide by zero during the slope calculation. To avoid this, we set both gradient_x and gradient_y
+					// to zero. During the calculation of the dominant direction, these values will be filtered (has to be > variance).
+					if (gradient_y != 0){
+						//std::cout << pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0) << "+++" << 1.0 / tan(gradient_y / gradient_x) << std::endl;
+						gradients[j - 1 + counter] = pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0);
+						slopes[j - 1 + counter] = 1.0 / tan(gradient_y / gradient_x);
+					}
+					else {
+						gradients[j - 1 + counter] = 0;
+						slopes[j - 1 + counter] = 0;
+					}
+
+					//printf("Cot: %d \n", slopes[j - 1 + counter]);
+				}
+				counter += 14;
+			}
+
+
+			//printf("/////////////////// \n");
+
+			//for (int l = 0; l < (exist_b + exist_l + exist_r + exist_t) * 14; l++){
+			//	//printf("Gradients: %d \n", gradients[l]);
+			//	std:: cout << "Gradients: " << gradients[l] << std::endl;
+			//	//printf("Slopes: %d \n", slopes[l]);
+			//	std::cout <<"Slopes: " << slopes[l] << std::endl;
 			//}
 
+			//printf("################### \n");
 
-			//// Calculate gradients and slope for bottom
-			//if (exist_b == 1){
-			//	for (int j = counter; j < counter + 14; j++){
-
-			//		double gradient_x = MB_b->luma[0][j - 1] * kernel_x[0][0] + MB_b->luma[0][j] * kernel_x[0][1] + MB_b->luma[0][j + 1] * kernel_x[0][2]
-			//			+ MB_b->luma[1][j - 1] * kernel_x[1][0] + MB_b->luma[1][j + 1] * kernel_x[1][2]
-			//			+ MB_b->luma[2][j - 1] * kernel_x[2][0] + MB_b->luma[2][j] * kernel_x[2][1] + MB_b->luma[2][j + 1] * kernel_x[2][2];
-
-			//		double gradient_y = MB_b->luma[0][j - 1] * kernel_y[0][0] + MB_b->luma[0][j] * kernel_y[0][1] + MB_b->luma[0][j + 1] * kernel_y[0][2]
-			//			+ MB_b->luma[1][j - 1] * kernel_y[1][0] + MB_b->luma[1][j + 1] * kernel_y[1][2]
-			//			+ MB_b->luma[2][j - 1] * kernel_y[2][0] + MB_b->luma[2][j] * kernel_y[2][1] + MB_b->luma[2][j + 1] * kernel_y[2][2];
-
-			//		gradients[j - 1] = pow((pow(gradient_x, 2) + pow(gradient_y, 2)), 1 / 2);
-			//		slopes[j - 1] = 1 / tan(gradient_y / gradient_x);
-			//	}
-			//	counter += 14;
-			//}
-
-			//// Calculate gradients and slope for left
-			//if (exist_r == 1){
-			//	for (int j = counter; j < counter + 14; j++){
-			//		double gradient_x = MB_l->luma[j - 1][13] * kernel_x[0][0] + MB_l->luma[j - 1][14] * kernel_x[0][1] + MB_l->luma[j - 1][15] * kernel_x[0][2]
-			//			+ MB_l->luma[j][13] * kernel_x[1][0] + MB_l->luma[j][15] * kernel_x[1][2]
-			//			+ MB_l->luma[j + 1][0] * kernel_x[2][0] + MB_l->luma[j + 1][1] * kernel_x[2][1] + MB_l->luma[j + 1][2] * kernel_x[2][2];
-
-			//		double gradient_y = MB_l->luma[j - 1][13] * kernel_y[0][0] + MB_l->luma[j - 1][14] * kernel_y[0][1] + MB_l->luma[j - 1][15] * kernel_y[0][2]
-			//			+ MB_l->luma[j][13] * kernel_y[1][0] + MB_l->luma[j][15] * kernel_y[1][2]
-			//			+ MB_l->luma[j + 1][13] * kernel_y[2][0] + MB_l->luma[j + 1][14] * kernel_y[2][1] + MB_l->luma[j + 1][15] * kernel_y[2][2];
-
-			//		gradients[j - 1] = pow((pow(gradient_x, 2) + pow(gradient_y, 2)), 1 / 2);
-			//		slopes[j - 1] = 1 / tan(gradient_y / gradient_x);
-			//	}
-			//	counter += 14;
-			//}
+			//printf("Left: %d \n", exist_l);
 
 			//////////////////////////////////////////////////////////////////////////////////
 			/////// 3. Determine dominant gradient direction.
 			//////////////////////////////////////////////////////////////////////////////////
 
-			//// The dominant gradient direction kan be expressed as the sum of all pixel gradients, weighted by their magnitude:
-			//// thèta_dominant = sum(slope_i*gradient_i) / sum(gradient_i)
+			// The dominant gradient direction kan be expressed as the sum of all pixel gradients, weighted by their magnitude:
+			// thèta_dominant = sum(slope_i*gradient_i) / sum(gradient_i)
 
-			//double nominator = 0;
-			//double denominator = 0;
+			double numerator = 0.0;
+			double denominator = 0.0;
 
-			//for (int j = 0; j < counter - 1; j++){
-			//	nominator += abs(gradients[i])*slopes[i];
-			//	denominator += abs(gradients[i]);
+			double mean = 0.0;
+			for (int j = 0; j < sizeof(*gradients); j++){
+				mean += gradients[j];
+			}
+			mean /= sizeof(*gradients);
+
+			double variance = 0;
+			for (int j = 0; j < sizeof(*gradients); j++){
+				variance += (gradients[j] - mean) * (gradients[j] - mean);
+			}
+			variance /= (sizeof(*gradients) - 1);
+
+			//std::cout << "VARIANCE = " << variance << std::endl;
+			
+			for (int j = 0; j < counter; j++){
+				if (gradients[j] > variance && abs(slopes[j]) < 100 && gradients[j] > 0) {
+					//std::cout << gradients[j] << " / " << slopes[j] << std::endl;
+					numerator += abs(gradients[j])*slopes[j];
+					denominator += abs(gradients[j]);
+				}
+			}
+
+			//std::cout << "numerator: " << numerator << "  /  denominator: " << denominator << std::endl;
+			//double dominant_direction = 1;
+			//if (denominator != 0.00000000000000000){
+			double dominant_direction = numerator*1.0 / denominator*1.0;
 			//}
+			//std::cout << "Dominant direction 1: " << dominant_direction << std::endl;
 
-			//double dominant_direction = nominator / denominator;
+			if (numerator == 0 ||denominator == 0){
+				dominant_direction = 1;
+			}
+
+			//std::cout << "Dominant direction 2: " << dominant_direction << std::endl;
 
 			//////////////////////////////////////////////////////////////////////////////////
 			/////// 4. Perform interpolation
@@ -582,7 +722,18 @@ void ErrorConcealer::conceal_spatial_3(Frame *frame)
 			//// For now, the interpolation is implemented with 1 direction. It is possible to divide 4, 8 (or another number) of dominant directions
 			//// to partition the macroblock in more segments. This should yield better results.
 
-			//double slope = 1 / tan(dominant_direction);
+			double slope = 1.0 / tan(dominant_direction);
+			if (slope > 16.0){
+				slope = 16.0;
+			} else if(slope < -16.0){
+				slope = -16.0;
+			}
+
+			//std::cout << "SLOPE = " << slope << std::endl;
+
+			//if (slope == 0) slope = 1.0;		// Because we can't divide by zero, we choose a slope when the slope is 0 (there shouldn't be edges anyway).
+			//printf("Slope: %d \n", slope);
+
 
 			//// The interpolation formula is p(j,k) = 1/(d1+d2) * [d2p1 + d1p2]
 			//// with p1 and p2 the points in the boundaries used for interpolation.
@@ -592,8 +743,589 @@ void ErrorConcealer::conceal_spatial_3(Frame *frame)
 			//// j1 = max(j - j*1/slope; 0), k1 = max(k - k*slope;0)
 			//// j2 = min(j + j*1/slope; N+1), k2 = min(k + k*slope; N+1) with N the size of a macroblock
 
+
+			double slope_rel = slope*(-1.0)*(-1.0);
+
+			// First, we interpolate the luma values:
 			for (int j = 0; j < 16; j++){
 				for (int k = 0; k < 16; k++){
+
+					int p1_luma;
+					int p2_luma;
+
+					int p1_cb;
+					int p2_cb;
+
+					int p1_cr;
+					int p2_cr;
+
+					int d1_x;
+					int d1_y;
+					int d2_x;
+					int d2_y;
+
+					//// OWN ADDITIONS
+
+
+
+					/////////////
+					// P1
+					/////////////
+
+
+
+					if (slope_rel > 0){	// P1 will be part of the left or upper MB.
+
+						//std::cout << "slope rel > 1" << std::endl;
+						int delta_y = j;
+						if (delta_y % 2 != 0) delta_y++;
+						int d1_x_temp = delta_y / slope_rel;
+
+						int delta_x = k;
+						if (delta_x % 2 != 0) delta_x--;
+						int d1_y_temp = delta_x * slope_rel;
+
+						if (MB->getMBNum() == 993 && j == 0 && k == 0){
+							std::cout << "slope>0, p(j,k)=(" << j << "," << k << "). d1_x_temp = " << d1_x_temp << " / d1_y_temp= " << d1_y_temp << std::endl;
+						}
+
+						if (d1_x_temp < d1_y_temp){
+							d1_x = d1_x_temp;
+							d1_y = j;
+
+							if (MB->getMBNum() == 993 && j == 0 && k == 0){
+								std::cout << "x < y" << std::endl;
+							}
+
+							int xcoord = k - d1_x;
+							if (xcoord < 0) xcoord = 0;
+
+							if (exist_t == 1){		// 
+								p1_luma = MB_t->luma[15][xcoord];
+							}
+							else {
+								if (exist_l == 1){
+									p1_luma = MB_l->luma[0][15];
+								} else {
+									p1_luma = 0;
+								}
+							}
+						}
+						else {
+							d1_x = k;
+							d1_y = d1_y_temp;
+
+
+
+							if (exist_l == 1){
+
+								int ycoord = j - d1_y;
+								if (ycoord < 0) ycoord = 0;
+
+								p1_luma = MB_l->luma[ycoord][15];
+							}
+							else {
+								if (exist_t == 1){
+									p1_luma = MB_t->luma[15][0];
+								}
+								else {
+									p1_luma = 128;
+								}
+							}
+						}
+					}
+
+					else { // P1 will be part of the left or lower MB.
+
+
+
+						//if (MB->getMBNum() == 47){
+						//	std::cout << "slope < 0" << std::endl;
+						//}
+
+						//std::cout << "slope rel <= 1" << std::endl;
+						//std::cout << 1 << std::endl;
+						int delta_y = 16 - j;
+						//std::cout << 2 << std::endl;
+						if (delta_y % 2 != 0) delta_y++;
+						//std::cout << 3 << std::endl;
+						//std::cout << slope_rel << std::endl;
+						int d1_x_temp = delta_y / abs(slope_rel);
+						//std::cout << 4 << std::endl;
+
+						int delta_x = k;
+
+						if (delta_x % 2 != 0) delta_x--;
+						int d1_y_temp = delta_x * abs(slope_rel);
+
+						if (MB->getMBNum() == 993 && j == 0 && k == 0){
+							std::cout << "slope<0, p(j,k)=(" << j << "," << k << "). d1_x_temp = " << d1_x_temp << " / d1_y_temp= " << d1_y_temp << std::endl;
+						}
+
+						//std::cout << "p(j,k)=(" << j << "," << k << "). d1_x_temp = " << d1_x_temp << " / d1_y_temp= " << d1_y_temp << std::endl;
+
+						//if (j == 0 && k == 0){
+							//std::cout << "slope < 1: " << slope_rel << std::endl;
+						//}
+
+
+						if (d1_x_temp < d1_y_temp){
+							//std::cout << "x < y" << std::endl;
+							d1_x = d1_x_temp;
+							d1_y = 16 - j;
+							if (exist_b == 1){
+								//std::cout << "bla" << std::endl;
+								int xcoord = k - d1_x;
+								if (xcoord < 0) xcoord = 0;
+								p1_luma = MB_b->luma[0][xcoord];
+								//std::cout << "blabla" << std::endl;
+							}
+							else {
+								if (exist_l == 1){
+									p1_luma = MB_l->luma[15][15];		// When bottom doesn't exist, we take the closest edge pixel that might be available: p(15,15) of the left MB.
+								}
+								else {
+									p1_luma = 128;
+								}
+							}
+						}
+						else {
+
+							//std::cout << "x > y" << std::endl;
+							d1_x = k;
+							d1_y = d1_y_temp;
+							//std::cout << "13 " << std::endl;
+							//std::cout << "j+d1_y = " << j << " + " << d1_y <<  " /// d1_x = " << d1_x << std::endl;
+
+							if (exist_l == 1){
+
+								int ycoord = j + d1_y;
+								if (ycoord > 15) ycoord = 15;
+								p1_luma = MB_l->luma[ycoord][15];
+							}
+							else 
+							{
+
+
+								if (exist_b == 1){
+
+									p1_luma = MB_b->luma[0][0];
+								}
+								else {
+									p1_luma = 128;
+
+
+								}
+									
+							}
+							//std::cout << "14 " << std::endl;
+
+						}
+					}
+
+					//std::cout << "check" << std::endl;
+
+					/////////////
+					// P2
+					/////////////
+
+					if (slope_rel > 0){				// When slope < 0, p2 will be part of the right or lower MB.
+						//std::cout << "slope > 1" << std::endl;
+						//std::cout << slope_rel << std::endl;
+
+						int delta_y = 16 - j;
+						if (delta_y % 2 != 0) delta_y++;
+						int d2_x_temp = delta_y / slope_rel;
+
+						int delta_x = 16-k;
+						if (delta_x % 2 != 0) delta_x--;
+						int d2_y_temp = delta_x * slope_rel;
+
+						//std::cout << "p(j,k)=(" << j << "," << k << "). d2_x_temp = " << d2_x_temp << " / d2_y_temp= " << d2_y_temp << std::endl;
+
+
+						if (d2_x_temp < d2_y_temp){
+
+							//std::cout << "x<y" << std::endl;
+							d2_x = d2_x_temp;
+							d2_y = 16 - j;
+							if (exist_b == 1){
+								int xcoord = k + d2_x;
+								if (xcoord > 15) xcoord = 15;
+								p2_luma = MB_b->luma[0][xcoord];
+							}
+							else {
+								p2_luma = p1_luma;	// When lower or right block doesn't exist, we interpolate between p1 and p1...
+							}
+						}
+						else {
+
+							//std::cout << "x>y" << std::endl;
+							d2_x = 16 - k;
+							d2_y = d2_y_temp;
+							//std::cout << d2_x << " / " << d2_y << std::endl;
+							//std::cout << j << " / " << k << std::endl;
+							if (exist_r == 1){
+								int ycoord = j + d2_y;
+								if (ycoord > 15) ycoord = 15;
+								p2_luma = MB_r->luma[ycoord][0];
+							}
+							else {
+								p2_luma = p1_luma;
+							}
+						}
+						
+					}
+
+					else {	// When slope < 1, p1 will be part of the upper or right border.
+						//std::cout << "slope < 1" << std::endl;
+
+						int delta_y = j;
+						if (delta_y%2 != 0) delta_y++;
+						int d2_x_temp = delta_y / abs(slope_rel);
+
+						int delta_x = 16 - k;
+						if (delta_x % 2 != 0) delta_x--;
+						int d2_y_temp = delta_x * abs(slope_rel);
+
+						//std::cout << "p(j,k)=(" << j << "," << k << "). d2_x_temp = " << d2_x_temp << " / d2_y_temp= " << d2_y_temp << std::endl;
+
+
+						if (d2_x_temp < d2_y_temp){	// p2 will be in the upper macroblock
+							//std::cout << "x < y" << std::endl;
+							d2_x = d2_x_temp;
+							d2_y = j;
+							if (exist_t == 1){	
+
+								int xcoord = k + d2_x;
+								if (xcoord > 15) xcoord = 15;
+								p2_luma = MB_t->luma[15][xcoord];
+							}
+							else {
+								p2_luma = p1_luma;
+							}
+						}
+						else {
+							//std::cout << "x > y" << std::endl;
+							d2_x = 16 - k;
+							d2_y = d2_y_temp;
+							//std::cout << k - d2_y << std::endl;
+							int ycoord = j - d2_y;
+							if (ycoord < 0) ycoord = 0;
+							if (exist_r == 1){
+								p2_luma = MB_r->luma[ycoord][0];
+							}
+							else {
+								p2_luma = p1_luma;
+							}
+
+							//std::cout << "test" << std::endl;
+						}
+					}
+
+
+					double d1 = pow(pow(d1_x*1.0, 2) + pow(d1_y*1.0, 2), 1.0 / 2.0);
+					double d2 = pow(pow(d2_x*1.0, 2) + pow(d2_y*1.0, 2), 1.0 / 2.0);
+
+					d1++;
+					d2++;
+
+					MB->luma[j][k] = 1.0 / (d1*1.0 + d2*1.0) * (d2*1.0*p1_luma + d1*1.0*p2_luma);
+
+				}
+			}
+
+			if (slope > 8.0){
+				slope = 8.0;
+			}
+			else if (slope < -8.0){
+				slope = -8.0;
+			}
+
+			// Next, we also interpolate the cb and cr values.
+			for (int j = 0; j < 8; j++){
+				for (int k = 0; k < 8; k++){
+
+
+
+					int p1_cb;
+					int p2_cb;
+
+					int p1_cr;
+					int p2_cr;
+
+					int d1_x;
+					int d1_y;
+					int d2_x;
+					int d2_y;
+
+					//// OWN ADDITIONS
+					//int slope_rel = slope*-1.0;
+
+					/////////////
+					// P1
+					/////////////
+
+					if (slope_rel > 0){	// P1 will be part of the left or upper MB.
+						//std::cout << "cbcr slope > 1" << std::endl;
+						int delta_y = j;
+						if (delta_y % 2 != 0) delta_y++;
+						int d1_x_temp = delta_y / slope_rel;
+
+						int delta_x = k;
+						if (delta_x % 2 != 0) delta_x--;
+						int d1_y_temp = delta_x * slope_rel;
+
+						if (MB->getMBNum() == 993 && j == 0 && k == 0){
+							std::cout << "CBCR slope>0, p(j,k)=(" << j << "," << k << "). d1_x_temp = " << d1_x_temp << " / d1_y_temp= " << d1_y_temp << std::endl;
+						}
+
+						if (d1_x_temp < d1_y_temp){
+							d1_x = d1_x_temp;
+							d1_y = j;
+							if (exist_t == 1){
+
+								int xcoord = k - d1_x;
+								if (xcoord < 0) xcoord = 0;
+
+								p1_cb = MB_t->cb[7][xcoord];
+								p1_cr = MB_t->cr[7][xcoord];
+
+							}
+							else {
+								if (exist_l == 1){
+
+									p1_cb = MB_l->cb[0][7];
+									p1_cr = MB_l->cr[0][7];
+								}
+								else{
+
+									p1_cb = 0;
+									p1_cr = 0;
+								}
+							}
+						}
+						else {
+
+							//if (MB->getMBNum() == 993 && j == 0 && k == 0){
+							//	std::cout << "BLABLABLA" << std::endl;
+							//}
+
+							d1_x = k;
+							d1_y = d1_y_temp;
+
+							int ycoord = j - d1_y;
+							if (ycoord < 0) ycoord = 0;
+
+							if (exist_l == 1){
+								p1_cb = MB_l->cb[ycoord][7];
+								p1_cr = MB_l->cr[ycoord][7];
+
+								//if (MB->getMBNum() == 993 && j == 0 && k == 0){
+								//	std::cout << "BLABLABLA" << std::endl;
+								//}
+
+							}
+							else {
+								if (exist_t == 1){
+									p1_cb = MB_t->cb[7][0];
+									p1_cr = MB_t->cr[7][0];
+
+									//if (MB->getMBNum() == 993 && j == 0 && k == 0){
+									//	std::cout << "BLABLABLA" << std::endl;
+									//}
+
+								}
+								else {
+									p1_cb = 0;
+									p1_cr = 0;
+								}
+							}
+						}
+					}
+					else { // P1 will be part of the left or lower MB.
+						//std::cout << "cbcr slope < 1" << std::endl;
+						int delta_y = 8 - j;
+						if (delta_y % 2 != 0) delta_y++;
+						//std::cout << 1 << std::endl;
+						//std::cout << delta_y << " / " << slope_rel << std::endl;
+						int d1_x_temp = delta_y / abs(slope_rel);
+						//std::cout << 2 << std::endl;
+
+						int delta_x = k;
+						if (delta_x % 2 != 0) delta_x--;
+						int d1_y_temp = delta_x * abs(slope_rel);
+
+						if (MB->getMBNum() == 993 && j == 0 && k == 0){
+							std::cout << "CBCR slope<0, p(j,k)=(" << j << "," << k << "). d1_x_temp = " << d1_x_temp << " / d1_y_temp= " << d1_y_temp << std::endl;
+						}
+
+						if (d1_x_temp < d1_y_temp){
+							//std::cout << " x < y" << std::endl;
+							d1_x = d1_x_temp;
+							d1_y = 8 - j;
+							//std::cout << d1_x << " / " << d1_y << std::endl;
+							if (exist_b == 1){
+								int xcoord = k - d1_x;
+								if (xcoord < 0) xcoord = 0;
+								p1_cb = MB_b->cb[0][xcoord];
+								p1_cr = MB_b->cr[0][xcoord];
+							}
+							else {
+								if (exist_l == 1){
+									p1_cb = MB_l->cb[7][7];		// When bottom doesn't exist, we take the closest edge pixel that will might be available: p(7,7) of the left MB.
+									p1_cr = MB_l->cr[7][7];
+								}
+								else {
+									p1_cb = 0;
+									p1_cr = 0;
+								}
+							}
+						}
+						else {
+							d1_x = k;
+							d1_y = d1_y_temp;
+							//std::cout << "x > y" << std::endl;
+							int ycoord = j + d1_y;
+							if (ycoord > 7) ycoord = 7;
+							//std::cout << ycoord << std::endl;
+							//std::cout << "test" << std::endl;
+							if (exist_l == 1){
+
+								p1_cb = MB_l->cb[ycoord][7];
+								p1_cr = MB_l->cr[ycoord][7];
+							}
+							else {
+								if (exist_b == 1){
+									p1_cb = MB_b->cb[0][0];
+									p1_cr = MB_b->cr[0][0];
+								} else{
+									p1_cb = 0;
+									p1_cr = 0;
+								}
+							}
+
+							//std::cout << "check" << std::endl;
+						}
+					}
+
+
+					/////////////
+					// P2
+					/////////////
+
+					if (slope_rel > 0){				// When slope < 0, p2 will be part of the right or lower MB.
+						//std::cout << "slope > 1" << std::endl;
+						int delta_y = 8 - j;
+						if (delta_y % 2 != 0) delta_y++;
+						int d2_x_temp = delta_y / slope_rel;
+
+						int delta_x = 8 - k;
+						if (delta_x % 2 != 0) delta_x--;
+						int d2_y_temp = delta_x * slope_rel;
+						if (d2_x_temp < d2_y_temp){
+							//std::cout << "x<y" << std::endl;
+							d2_x = d2_x_temp;
+							d2_y = 8 - j;
+							if (exist_b == 1){
+								int xcoord = k + d2_x;
+								if (xcoord > 7) xcoord = 7;
+								p2_cb = MB_b->cb[0][xcoord];
+								p2_cr = MB_b->cr[0][xcoord];
+							}
+							else {
+								p2_cb = p1_cb;	// When lower or right block doesn't exist, we interpolate between p1 and p1...
+								p2_cr = p1_cr;
+							}
+						}
+						else {
+							//std::cout << "x>y" << std::endl;
+							d2_x = 8 - k;
+							d2_y = d2_y_temp;
+							if (exist_r == 1){
+								int ycoord = j + d2_y;
+								if (ycoord > 7) ycoord = 7;
+								p2_cb = MB_r->cb[ycoord][0];
+								p2_cr = MB_r->cr[ycoord][0];
+							}
+							else {
+								p2_cb = p1_cb;
+								p2_cr = p1_cr;
+							}
+						}
+
+					}
+					else {	// When slope < 1, p1 will be part of the upper or right border.
+						int delta_y = j;
+						if (delta_y % 2 != 0) delta_y++;
+						int d2_x_temp = delta_y / abs(slope_rel);
+
+						int delta_x = 8 - k;
+						if (delta_x % 2 != 0) delta_x--;
+						int d2_y_temp = delta_x * abs(slope_rel);
+						if (d2_x_temp < d2_y_temp){	// p2 will be in the upper macroblock
+							d2_x = d2_x_temp;
+							d2_y = j;
+							if (exist_t == 1){	
+								int xcoord = k + d2_x;
+								if (xcoord > 7) xcoord = 7;
+								p2_cb = MB_t->cb[7][xcoord];
+								p2_cr = MB_t->cr[7][xcoord];
+							}
+							else {
+								p2_cb = p1_cb;
+								p2_cr = p1_cr;
+							}
+						}
+						else {
+							d2_x = 8 - k;
+							d2_y = d2_y_temp;
+							if (exist_r == 1){
+								int ycoord = j - d2_y;
+								if (ycoord < 0) ycoord = 0;
+								p2_cb = MB_r->cb[ycoord][0];
+								p2_cr = MB_r->cr[ycoord][0];
+							}
+							else {
+								p2_cb = p1_cb;
+								p2_cr = p1_cr;
+							}
+						}
+					}
+
+
+
+
+
+
+
+					// We search for p2, this can be every border, except for the left one.
+					//if (slope < 0){ // When the slope is smaller than, p2 will always be in the right or lower MB.
+
+					// We determine at which coordinates we will find the pixel we need for interpolation.
+
+					//	int p2_y = slope*-1.0 * (17 - j) + k;
+					//	int p2_x = (17 - j)*1.0 / slope + k;
+
+					//	if (p2_y < p2_x) { // The interpolated pixel will be part of the right MB. The pixel will be located at j=p_y.
+					//		p2_luma = MB_r->luma[p2_y][0];
+					//	}
+
+
+
+					//	int d_down = (16 - j) / (-1.0 * slope);
+					//	int d_right = (16 - k) / (-1.0 / (slope*1.0));
+					//	if (d_down > d_right){
+					//		//p1_luma = MB_b->luma[0][k + d1_x];
+					//	} else {
+
+					//	}
+					//} else {
+
+					//}
+
+
+
 					//int j1 = fmax(j - j * 1 / slope, 0);
 					//int k1 = fmax(k - k * slope, 0);
 
@@ -605,90 +1337,111 @@ void ErrorConcealer::conceal_spatial_3(Frame *frame)
 					//int d2_x = j * 1.0 + j2 * 1.0;
 					//int d2_y = k * 1.0 + k2 * 1.0;
 
-					//double d1 = pow(pow(d1_x*1.0, 2) + pow(d1_y*1.0, 2), 1 / 2);
-					//double d2 = pow(pow(d2_x*1.0, 2) + pow(d2_y*1.0, 2), 1 / 2);
+					//// OWN ADDITIONS
+					//int slope_rel = slope*-1.0;
 
-					//int p1;
-					//int p2;
+					//int delta_x;
+					//int delta_y;
 
-			//		// We need the value of the pixels we are going to interpolate. We can do this with the distances d1x,y, d2x,y we calculated.
-			//		// We can derive from the formulas that p1 will never be a border pixel of the right macroblock. We will check for every other macroblock.
-			//		if (j + d1_y < 0 && exist_t == 1){
-			//			// We need a pixel from the upper border.
-			//			p1 = MB_t->luma[15][k + d1_x];
-			//		}
-			//		else if (j+d1_y > 15 && exist_b == 1){
-			//			// We need a pixel from the lower border.
-			//			p1 = MB_b->luma[0][k + d1_x];
-			//		}
-			//		else if (k+d1_x < 0 && exist_l == 1){
-			//			// We need a pixel from the left border.
-			//			p1 = MB_l->luma[j + d1_y][15];
-			//		}
+					//// d2
 
+					//if (slope > 0){
+					//	delta_x = 16 - j;
+					//}
+					//else {
+					//	delta_x = j;
+					//}
 
-			//		// p2 will never be a border pixel of the left macroblock. We will check for every other macroblock.
-			//		if (j + d2_y < 0 && exist_t == 1){
-			//			// We need a pixel from the upper border.
-			//			p2 = MB_t->luma[15][k + d2_x];
-			//		}
-			//		else if (j + d2_y > 15 && exist_b == 1){
-			//			// We need a pixel from the lower border.
-			//			p2 = MB_b->luma[0][k + d2_x];
-			//		}
-			//		else if (k + d1_x < 0 && exist_r == 1){
-			//			// We need a pixel from the right border.
-			//			p2 = MB_r->luma[j+d2_y][0];
-			//		}
+					////if (delta_x % 2 != 0) delta_x++;
+					//int d2_x_pos = delta_x / slope;
 
-			//		//MB->luma[j][k] = 1.0 / (d1*1.0 + d2*1.0) * (d2*1.0*p1 + d1*1.0*p2);
+					//if (slope > 0){
+					//	delta_y = 16 - k;
+					//}
+					//else {
+					//	delta_y = k;
+					//}
+					////if (delta_y % 2 != 0) delta_y--;
+					//int d2_y_pos = delta_y * slope;
 
-				}
-			}
+					//if (d2_y_pos < d2_x_pos){
 
-			//MB->setConcealed();
+					//}
+					//else {
+					//
+					//
+					//}
 
-		}
-	}
+					//std::cout << "D1: (" << j << "," << k << ") in MB. " << "d1_y = " << d1_y << " / d1_x = " << d1_x << std::endl;
 
 
-	/*
-	int kRows = 3;
-	int kCols = 3;
+					double d1 = pow(pow(d1_x*1.0, 2) + pow(d1_y*1.0, 2), 1.0 / 2.0);
+					double d2 = pow(pow(d2_x*1.0, 2) + pow(d2_y*1.0, 2), 1.0 / 2.0);
 
-	int kCenterX = 1;
-	int kCenterY = 1;
+					d1++;
+					d2++;
 
-	int nn, mm, ii, jj;
+					//std::cout << "slope: " << slope << std::endl;
+					//std::cout << "d1: " << d1_x << "##" << d1_y << " / d2: " << d2_x << "##" << d2_y << std::endl;
 
-	Frame filtered(frame->getWidth(), frame->getHeight());
+					//std::cout << "d1: " << d1 << " / d2: " << d2 << std::endl;
+
+					//int p1_luma;
+					//int p2_luma;
+
+					////// We need the value of the pixels we are going to interpolate. We can do this with the distances d1x,y, d2x,y we calculated.
+					////// We can derive from the formulas that p1 will never be a border pixel of the right macroblock. We will check for every other macroblock.
+					//if (j + d1_y < 0 && exist_t == 1){
+					//	// We need a pixel from the upper border.
+					//	p1_luma = MB_t->luma[15][k + d1_x];
+					//}
+					//else if (j+d1_y > 15 && exist_b == 1){
+					//	// We need a pixel from the lower border.
+					//	p1_luma = MB_b->luma[0][k + d1_x];
+					//}
+					//else if (k+d1_x < 0 && exist_l == 1){
+					//	// We need a pixel from the left border.
+					//	p1_luma = MB_l->luma[j + d1_y][15];
+					//}
 
 
-	for (int i = 0; i < frame->getHeight(); i++){			// rows
-		for (int j = 0; j < frame->getWidth(); j++){		// columns
-			for (int m = 0; m < kRows; m++){				// kernel rows
-				mm = kRows -1 - m;							// row index of flipped kernel
-				for (int n = 0; n < kCols; n++){			// kernel columns
-					nn = kCols - 1 - n;						// column index of flipped kernel
+					//// p2 will never be a border pixel of the left macroblock. We will check for every other macroblock.
+					//if (j + d2_y < 0 && exist_t == 1){
+					//	// We need a pixel from the upper border.
+					//	p2_luma = MB_t->luma[15][k + d2_x];
+					//}
+					//else if (j + d2_y > 15 && exist_b == 1){
+					//	// We need a pixel from the lower border.
+					//	p2_luma = MB_b->luma[0][k + d2_x];
+					//}
+					//else if (k + d1_x < 0 && exist_r == 1){
+					//	// We need a pixel from the right border.
+					//	p2_luma = MB_r->luma[j+d2_y][0];
+					//}
+
+					//std::cout << "luma componenent: " << 1.0 / (d1*1.0 + d2*1.0) * (d2*1.0*p1_luma*1.0*p2_luma) << std::endl;
+
+					//MB->luma[j][k] = 1.0 / (d1*1.0 + d2*1.0) * (d2*1.0*p1_luma + d1*1.0*p2_luma);
+
+					MB->cb[j][k] = 1.0 / (d1*1.0 + d2*1.0) * (d2*1.0*p1_cb + d1*1.0*p2_cb);
+					MB->cr[j][k] = 1.0 / (d1*1.0 + d2*1.0) * (d2*1.0*p1_cr + d1*1.0*p2_cr);
+
+					//std::cout << "cb component: " << 1.0 / (d1*1.0 + d2*1.0) * (d2*1.0*p1_cb + d1*1.0*p2_cb) << std::endl << "cr component: " << 1.0 / (d1*1.0 + d2*1.0) * (d2*1.0*p1_cr + d1*1.0*p2_cr) << std::endl;
 					
-					// index of input signal, used for checking boundary
-					ii = i + (m - kCenterY);
-					jj = j + (n - kCenterX);
-
-					// ignore input samples which are out of bounds
-					if (ii >= 0 && ii < frame->getHeight() && jj >= 0 && jj < frame->getWidth()){
-						Macroblock MB = frame->getMacroblock(jj/16 + ii/16*frame->getWidth());
-						filtered[i][j] += 
-					}
 
 				}
 			}
+
+
+			MB->setConcealed();
+
+
 		}
 	}
-	*/
 
 
 }
+
 
 
 void ErrorConcealer::conceal_temporal_1(Frame *frame, Frame *referenceFrame)
