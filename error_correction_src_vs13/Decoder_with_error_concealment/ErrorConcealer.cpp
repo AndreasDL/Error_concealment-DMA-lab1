@@ -1187,41 +1187,6 @@ float CheckMB(Macroblock *MB, Frame *frame, int MBx){
 	float errorperpixel = float(verschil)/aantalvglnpixels;
 	return errorperpixel;
 }
-//check edges of a subblock
-float CheckSubB(Macroblock *MB, Frame *frame,const int MBx, const int _x, const int _y, const int subsize){
-	//TODO check if macroblocks are there
-	int verschil = 0;
-	int aantalvglnpixels = 0;
-	
-	const int MBxpos = MB->getXPos() * 16 + _x;
-	const int MBypos = MB->getYPos() * 16 + _y;
-	const int width = frame->getWidth() * 16;
-	const int height = frame->getHeight() * 16;
-
-	for (int t = 0; t < subsize; t++){
-		if (MBypos > 0){
-			verschil += abs(getYPixel(frame, MBypos, MBxpos + t) - getYPixel(frame, MBypos - 1, MBxpos + t)); //top and above
-			++aantalvglnpixels;
-		}
-
-		if (MBypos < height - subsize ){
-			verschil += abs(getYPixel(frame, MBypos + subsize -1 , MBxpos + t) - getYPixel(frame, MBypos + subsize, MBxpos + t)); //bot and below
-			++aantalvglnpixels;
-		}
-
-		if (MBxpos > 0){
-			verschil += abs(getYPixel(frame, MBypos + t,MBxpos) - getYPixel(frame, MBypos + t, MBxpos-1));//left
-			++aantalvglnpixels;
-		}
-		if (MBxpos < width - subsize){
-			verschil += abs(getYPixel(frame, MBypos + t, MBxpos + subsize -1 ) - getYPixel(frame, MBypos + t, MBxpos +subsize));//right
-			++aantalvglnpixels;
-		}
-	}
-
-	float errorperpixel = float(verschil) / aantalvglnpixels;
-	return errorperpixel;
-}
 //get motion vector for a subblock (_x;_y) in block MBx.
 MotionVector getMV(Frame* frame, const int MBx, const int sub_x, const int sub_y, const int subsize){
 	MotionVector mv;
@@ -1293,14 +1258,15 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int
 						//cout << MBx << "\\" << x << ":" << y << " | " << vec.x << " : " << vec.y << endl;
 						//fill
 						FillSubBMV(MB, frame, referenceFrame, vec, x, y, subsize);
-						//check err
-						float err = CheckSubB(MB, frame, MBx, x, y, subsize);
-						cout << err << endl;
-						//err too big => use spatial
-
 					}
 				}
 			}
+			//macroblock inserted => Error?
+			//check err
+			float err = CheckMB(MB, frame, MBx);
+			cout << err << endl;
+			//err too big => use spatial
+
 		}
 	}
 	cout << "\tMissing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
