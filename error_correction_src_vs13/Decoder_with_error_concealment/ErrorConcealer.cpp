@@ -4,8 +4,16 @@
 #include <iostream>
 #include <math.h>
 #include <iostream>
+#include <ctime>
 using namespace std;
-
+//timing functions
+double starttime;
+void startChrono(){
+	starttime = double(clock()) / CLOCKS_PER_SEC;
+}
+double stopChrono(){
+	return (double(clock()) / CLOCKS_PER_SEC ) -starttime;
+}
 ErrorConcealer::ErrorConcealer(short conceal_method){
 	this->conceal_method = conceal_method;
 }
@@ -410,8 +418,7 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame){
 	}
 }
 //uses edge information
-void ErrorConcealer::conceal_spatial_3(Frame *frame)
-{
+void ErrorConcealer::conceal_spatial_3(Frame *frame){
 	double kernel_x[3][3] = { { -1, 0, 1 }, { -2, 0, 2 }, { -1, 0, 1 } };
 	double kernel_y[3][3] = { { 1, 2, 1 }, { 0, 0, 0 }, { -1, -2, -1 } };
 
@@ -1084,8 +1091,7 @@ void ErrorConcealer::conceal_spatial_3(Frame *frame)
 }
 
 //assume no motion & use previous block
-void ErrorConcealer::conceal_temporal_1(Frame *frame, Frame *referenceFrame)
-{
+void ErrorConcealer::conceal_temporal_1(Frame *frame, Frame *referenceFrame){
 	//block missing? use previous block (assume no motion in block)
 	int numMB = frame->getNumMB();
 	for (int MBx = 0; MBx < numMB; ++MBx){
@@ -1227,6 +1233,8 @@ MotionVector getMV(Frame* frame, const int MBx, const int sub_x, const int sub_y
 	return mv;
 }
 void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int size){
+	startChrono();
+	int missing = 0;
 	if (!frame->is_p_frame()){
 		//if the frame is not Predictibely coded (we should have the whole frame), then we conceal using the spacial method instead.
 		conceal_spatial_2(frame);
@@ -1241,6 +1249,7 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int
 		for (int MBx = 0; MBx < numMB; ++MBx){
 			Macroblock *MB = frame->getMacroblock(MBx);
 			if (MB->isMissing()){
+				missing++;
 				//foreach subblock
 				for (int y = 0; y < 16; y += subsize){
 					for (int x = 0; x < 16; x += subsize){
@@ -1258,6 +1267,7 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int
 			}
 		}
 	}
+	cout << "\tMissing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
 
 //Fill MB based on usedMB
@@ -1283,8 +1293,7 @@ void FillMB(Macroblock *MB, Macroblock *usedMB, Frame *frame, Frame *referenceFr
 		}
 	}
 }
-void conceal_spatial_2_zonder_setConcealed(Frame *frame)
-{
+void conceal_spatial_2_zonder_setConcealed(Frame *frame){
 	int numMB = frame->getNumMB();
 	Macroblock* MB;
 	int exist_t = 1;
