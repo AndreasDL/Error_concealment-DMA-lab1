@@ -1160,7 +1160,7 @@ void FillSubBMV(Macroblock *MB, Frame *frame, Frame *referenceFrame, const Motio
 	}
 }
 //how much does the edge of MB differ from usedMB ?
-float CheckMB(Macroblock *MB, Frame *frame, int MBx){
+float CheckMB(Macroblock *MB, Frame *frame,const int MBx){
 	int verschil = 0;
 	int aantalvglnpixels = 0;
 	int MBxpos = MB->getXPos() * 16;
@@ -1232,7 +1232,21 @@ MotionVector getMV(Frame* frame, const int MBx, const int sub_x, const int sub_y
 		);
 	return mv;
 }
-void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int size){
+//conceals a macroblock by using motion estimation from 3B and returns the error
+float ErrorConcealer::conceal_temporal_2_block(Frame *frame, Frame* referenceFrame,Macroblock * MB, const int MBx, const int subsize){
+	//foreach subblock
+	for (int y = 0; y < 16; y += subsize){
+		for (int x = 0; x < 16; x += subsize){
+			//get motion vector => avg
+			MotionVector vec = getMV(frame, MBx, x, y, subsize);
+			//cout << MBx << "\\" << x << ":" << y << " | " << vec.x << " : " << vec.y << endl;
+			//fill
+			FillSubBMV(MB, frame, referenceFrame, vec, x, y, subsize);
+		}
+	}
+	return CheckMB(MB, frame, MBx);
+}
+void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame,const int size){
 	startChrono();
 	int missing = 0;
 	if (!frame->is_p_frame()){
@@ -1252,17 +1266,7 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int
 			Macroblock *MB = frame->getMacroblock(MBx);
 			if (MB->isMissing()){
 				missing++;
-				//foreach subblock
-				for (int y = 0; y < 16; y += subsize){
-					for (int x = 0; x < 16; x += subsize){
-						//get motion vector => avg
-						MotionVector vec = getMV(frame, MBx, x, y, subsize);
-						//cout << MBx << "\\" << x << ":" << y << " | " << vec.x << " : " << vec.y << endl;
-						//fill
-						FillSubBMV(MB, frame, referenceFrame, vec, x, y, subsize);
-					}
-				}
-				float err = CheckMB(MB, frame, MBx);
+				float err = conceal_temporal_2_block(frame, referenceFrame, MB, MBx, subsize);
 				if (err > 20){ //Error too big => use spatial
 					todo.push(MBx);
 					MBstate[MBx] = MISSING;
@@ -1480,55 +1484,24 @@ float CheckMB_temporal_3(Macroblock *MB,Macroblock *tempMB, Frame *frame, int MB
 	return errorperpixel;
 }
 void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
+	/*
 	conceal_spatial_2_zonder_setConcealed(frame);
 	float error = 99999999;
-	MBPOSITION bestResult = NONE;
 	int numMB = frame->getNumMB();
 	Macroblock *usedMB; //MB in same frame, used for MV (TOP, BOTTOM,...)
 	Macroblock tempMB;
+
 	for (int MBx = 0; MBx < numMB; ++MBx){
-		if (frame->getMacroblock(MBx)->isMissing()){
+		Macroblock* MB = frame->getMacroblock(MBx);
+		if (MB->isMissing()){
+			//how many neighbours are there?
+			//4 => Fix try to use motion
+			
+			//3 => fix
+
 			Macroblock *MB = frame->getMacroblock(MBx);
-			//check TOP 
-			if (MB->getYPos() != 0){
-				usedMB = frame->getMacroblock(MBx - frame->getWidth());
-				FillMB_temporal_3(MB,&tempMB, usedMB, frame, referenceFrame);
-				float errorperpixel = CheckMB_temporal_3(MB,&tempMB, frame, MBx);
-				if(errorperpixel < error){
-					error = errorperpixel;
-					bestResult = TOP;
-				}
-			}
-			//check BOTTOM 
-			if (MB->getYPos() != (frame->getHeight() - 1)){
-				usedMB = frame->getMacroblock(MBx + frame->getWidth());
-				FillMB_temporal_3(MB,&tempMB, usedMB, frame, referenceFrame);
-				float errorperpixel = CheckMB_temporal_3(MB,&tempMB, frame, MBx);
-				if(errorperpixel < error){
-					error = errorperpixel;
-					bestResult = BOTTOM;
-				}
-			}
-			//check LEFT 
-			if (MB->getXPos() != 0){
-				usedMB = frame->getMacroblock(MBx - 1);
-				FillMB_temporal_3(MB,&tempMB, usedMB, frame, referenceFrame);
-				float errorperpixel = CheckMB_temporal_3(MB,&tempMB, frame, MBx);
-				if(errorperpixel < error){
-					error = errorperpixel;
-					bestResult = LEFT;
-				}
-			}
-			//check RIGHT 
-			if (MB->getXPos() != (frame->getWidth() - 1)){
-				usedMB = frame->getMacroblock(MBx + 1);
-				FillMB_temporal_3(MB,&tempMB, usedMB, frame, referenceFrame);
-				float errorperpixel = CheckMB_temporal_3(MB,&tempMB, frame, MBx);
-				if(errorperpixel < error){
-					error = errorperpixel;
-					bestResult = RIGHT;
-				}
-			}
+
+
 			//check spatial
 			//float errorperpixel = CheckMB_temporal_3(MB,MB, frame, MBx);
 			if(error > 25){
@@ -1560,7 +1533,7 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 					break;	
 			}
 		}
-	}
+	}*/
 }
 
 
