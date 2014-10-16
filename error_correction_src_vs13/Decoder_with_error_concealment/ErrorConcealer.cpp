@@ -9,17 +9,13 @@
 #include <queue>
 #include <functional>
 using namespace std;
-typedef pair<int,Macroblock*> task; //todo element in the priority queue
 
-//timing functions for debugging and evaluation purposes only!
-double starttime;
-void startChrono(){
-	starttime = double(clock()) / CLOCKS_PER_SEC;
-}
-double stopChrono(){
-	return (double(clock()) / CLOCKS_PER_SEC ) -starttime;
-}
+//types
+typedef pair<int,Macroblock*> task; //task for priority queue
+enum MBSTATE { OK, MISSING, CONCEALED }; //states
+enum position{ pos_TOP, pos_BOT, pos_LEFT, pos_RIGHT }; //positions
 
+//constructors & 'main method'
 ErrorConcealer::ErrorConcealer(short conceal_method){
 	this->conceal_method = conceal_method;
 }
@@ -61,6 +57,41 @@ void ErrorConcealer::concealErrors(Frame *frame, Frame *referenceFrame){
 	}
 }
 
+//Aid functions
+pixel getYPixel(Frame *frame, int posx, int posy){
+	int MBx = (int(posy / 16) * frame->getWidth());
+	MBx += (int(posx / 16));
+	Macroblock *MB = frame->getMacroblock(MBx);
+	pixel luma = MB->luma[posy % 16][posx % 16];
+	return luma;
+}
+pixel getCbPixel(Frame *frame, int posx, int posy){
+	int MBx = (int(posy / 8) * frame->getWidth());
+	MBx += (int(posx / 8));
+	Macroblock *MB = frame->getMacroblock(MBx);
+	pixel cb = MB->cb[posy % 8][posx % 8];
+	return cb;
+}
+pixel getCrPixel(Frame *frame, int posx, int posy){
+	int MBx = (int(posy / 8) * frame->getWidth());
+	MBx += (int(posx / 8));
+	Macroblock *MB = frame->getMacroblock(MBx);
+	pixel cr = MB->cr[posy % 8][posx % 8];
+	return cr;
+}
+
+//timing functions for debugging and evaluation purposes only!
+double starttime;
+void startChrono(){
+	starttime = double(clock()) / CLOCKS_PER_SEC;
+}
+double stopChrono(){
+	return (double(clock()) / CLOCKS_PER_SEC) - starttime;
+}
+
+//*****************************************************************************************************
+//******************************************Conceal Methods********************************************
+//*****************************************************************************************************
 //No adjacent blocks missing, use interpolate with the 2 closest pixels to solve this.
 void ErrorConcealer::conceal_spatial_1(Frame *frame){
 	int numMB = frame->getNumMB();
@@ -199,7 +230,7 @@ void ErrorConcealer::conceal_spatial_1(Frame *frame){
 	}
 	delete MBEmpty;
 }
-enum MBSTATE { OK, MISSING, CONCEALED };
+
 //fix method for conceal_spatial_2
 void f(Macroblock* MB, int* exist_l, int* exist_r, int* exist_t, int* exist_b, MBSTATE* MBstate, int MBx, Frame *frame){
 		   
@@ -302,6 +333,7 @@ void f(Macroblock* MB, int* exist_l, int* exist_r, int* exist_t, int* exist_b, M
 		   }
 		   delete MBEmpty;
 }
+
 //can fix even if adjacent blocks are missing
 void ErrorConcealer::conceal_spatial_2(Frame *frame){
 	//init
@@ -423,6 +455,124 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame){
 		}
 	}
 }
+void conceal_spatial_2_zonder_setConcealed(Frame *frame){
+	int numMB = frame->getNumMB();
+	Macroblock* MB;
+	int exist_t = 1;
+	int exist_b = 1;
+	int exist_r = 1;
+	int exist_l = 1;
+	int MBsConcealedL1 = 1;
+	int MBsConcealedL1L2 = 1;
+	int nrOfMBsMissing = 0;
+	int totalConcealed = 0;
+	MBSTATE* MBstate = new MBSTATE[numMB];
+	for (int MBx = 0; MBx < numMB; ++MBx){
+		if (frame->getMacroblock(MBx)->isMissing()){
+			MBstate[MBx] = MISSING;
+			++nrOfMBsMissing;
+		}
+		else{
+			MBstate[MBx] = OK;
+		}
+	}
+	int loop = 0;
+	while (nrOfMBsMissing > 0){
+
+		MBsConcealedL1L2 = 1;
+		while (MBsConcealedL1L2 > 0){
+			MBsConcealedL1 = 1;
+			MBsConcealedL1L2 = 0;
+			while (MBsConcealedL1 > 0){
+				MBsConcealedL1 = 0;
+				for (int MBx = 0; MBx < numMB; ++MBx)
+				{
+					MB = frame->getMacroblock(MBx);
+					exist_t = 1;
+					exist_b = 1;
+					exist_r = 1;
+					exist_l = 1;
+					if (MBstate[MBx] == MISSING)
+					{
+						f(MB, &exist_l, &exist_r, &exist_t, &exist_b,
+							MBstate, MBx, frame);
+						if (exist_l + exist_r + exist_t + exist_b > 2){
+							//MB->setConcealed();
+							++MBsConcealedL1;
+							++MBsConcealedL1L2;
+							--nrOfMBsMissing;
+							++totalConcealed;
+							MBstate[MBx] = CONCEALED;
+						}
+					}
+				}
+				//zet alle CONCEALED om naar OK
+				for (int MBx = 0; MBx < numMB; ++MBx){
+					if (MBstate[MBx] == CONCEALED){
+						MBstate[MBx] = OK;
+					}
+				}
+			}
+			bool oneMBConcealed = false;
+			for (int MBx = 0; MBx < numMB && !oneMBConcealed; ++MBx)
+			{
+				MB = frame->getMacroblock(MBx);
+				exist_t = 1;
+				exist_b = 1;
+				exist_r = 1;
+				exist_l = 1;
+				if (MBstate[MBx] == MISSING)
+				{
+					f(MB, &exist_l, &exist_r, &exist_t, &exist_b,
+						MBstate, MBx, frame);
+					if (exist_l + exist_r + exist_t + exist_b > 1){
+						//MB->setConcealed();
+						--nrOfMBsMissing;
+						++totalConcealed;
+						MBstate[MBx] = CONCEALED;
+						oneMBConcealed = true;
+						++MBsConcealedL1L2;
+					}
+				}
+			}
+			//zet alle CONCEALED om naar OK
+			for (int MBx = 0; MBx < numMB; ++MBx){
+				if (MBstate[MBx] == CONCEALED){
+					MBstate[MBx] = OK;
+				}
+			}
+		}
+		bool oneMBConcealed = false;
+		for (int MBx = 0; MBx < numMB && !oneMBConcealed; ++MBx)
+		{
+			MB = frame->getMacroblock(MBx);
+			exist_t = 1;
+			exist_b = 1;
+			exist_r = 1;
+			exist_l = 1;
+			if (MBstate[MBx] == MISSING)
+			{
+				f(MB, &exist_l, &exist_r, &exist_t, &exist_b,
+					MBstate, MBx, frame);
+				if (exist_l + exist_r + exist_t + exist_b > 0){
+					//MB->setConcealed();
+					--nrOfMBsMissing;
+					++totalConcealed;
+					MBstate[MBx] = CONCEALED;
+					oneMBConcealed = true;
+					++MBsConcealedL1L2;
+				}
+			}
+		}
+		//zet alle CONCEALED om naar OK
+		for (int MBx = 0; MBx < numMB; ++MBx){
+			if (MBstate[MBx] == CONCEALED){
+				MBstate[MBx] = OK;
+			}
+		}
+	}
+}
+
 //uses edge information
 void ErrorConcealer::conceal_spatial_3(Frame *frame){
 	double kernel_x[3][3] = { { -1, 0, 1 }, { -2, 0, 2 }, { -1, 0, 1 } };
@@ -1115,28 +1265,7 @@ void ErrorConcealer::conceal_temporal_1(Frame *frame, Frame *referenceFrame){
 	}
 }
 
-//getters
-pixel getYPixel(Frame *frame, int posx, int posy){
-	int MBx = (int(posy/16) * frame->getWidth() ) ;
-	MBx += (int(posx/16));
-	Macroblock *MB = frame->getMacroblock(MBx);
-	pixel luma = MB->luma[posy%16][posx%16];
-	return luma;	
-}
-pixel getCbPixel(Frame *frame, int posx, int posy){
-	int MBx = (int(posy/8) * frame->getWidth() ) ;
-	MBx += (int(posx/8));
-	Macroblock *MB = frame->getMacroblock(MBx);
-	pixel cb = MB->cb[posy%8][posx%8];
-	return cb;	
-}
-pixel getCrPixel(Frame *frame, int posx, int posy){
-	int MBx = (int(posy/8) * frame->getWidth() ) ;
-	MBx += (int(posx/8));
-	Macroblock *MB = frame->getMacroblock(MBx);
-	pixel cr = MB->cr[posy%8][posx%8];
-	return cr;	
-}
+//temporal 2
 //fill a sub block based on a motion vector
 void FillSubBMV(Macroblock *MB, Frame *frame, Frame *referenceFrame, const MotionVector &vec, const int _x, const int _y, const int subsize){
 
@@ -1245,8 +1374,8 @@ MotionVector getMV(Frame* frame, const int MBx, const int sub_x, const int sub_y
 
 	return (denominatorX == 0 && denominatorY == 0 ? notthere : mv);
 }
-//conceals a macroblock by using motion estimation from 3B and returns the error
-float ErrorConcealer::conceal_temporal_2_block(Frame *frame, Frame* referenceFrame,Macroblock * MB, const int MBx, const int subsize){
+//conceals a macroblock by using motion estimation from 3B and returns the error. Does not set this block to concealed
+float conceal_temporal_2_block(Frame *frame, Frame* referenceFrame,Macroblock * MB, const int MBx, const int subsize){
 	//foreach subblock
 	for (int y = 0; y < 16; y += subsize){
 		for (int x = 0; x < 16; x += subsize){
@@ -1309,196 +1438,12 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame,cons
 	}
 	cout << "\tsize: " << size << " Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
+//same as conceal_temporal_2 but now with dynamic block sizes
+void ErrorConcealer::conceal_temporal_2_dynamic(Frame* frame, Frame *referenceFrame, const int size){
+	//TODO
+}
 
-//Fill MB based on usedMB
-enum MBPOSITION { NONE, TOP, BOTTOM, LEFT, RIGHT, SPATIAL };
-void FillMB(Macroblock *MB, Macroblock *usedMB, Frame *frame, Frame *referenceFrame){
-	int MBxpos = MB->getXPos();
-	int MBypos = MB->getYPos();
-	for (int i = 0; i < 16; ++i){
-		for (int j = 0; j < 16; ++j){
-			int xposref = (MBxpos * 16) + j + usedMB->mv.x;
-			int yposref = (MBypos * 16) + i + usedMB->mv.y;
-			if (xposref < 0)
-				xposref = 0;
-			if (xposref >(frame->getWidth() * 16 - 1))
-				xposref = (frame->getWidth() * 16 - 1);
-			if (yposref < 0)
-				yposref = 0;
-			if (yposref >(frame->getHeight() * 16 - 1))
-				yposref = (frame->getHeight() * 16 - 1);
-			MB->luma[i][j] = getYPixel(referenceFrame, xposref, yposref);
-			MB->cb[i / 2][j / 2] = getCbPixel(referenceFrame, xposref / 2, yposref / 2);
-			MB->cr[i / 2][j / 2] = getCrPixel(referenceFrame, xposref / 2, yposref / 2);
-		}
-	}
-}
-void conceal_spatial_2_zonder_setConcealed(Frame *frame){
-	int numMB = frame->getNumMB();
-	Macroblock* MB;
-	int exist_t = 1;
-	int exist_b = 1;
-	int exist_r = 1;
-	int exist_l = 1;
-	int MBsConcealedL1 = 1;
-	int MBsConcealedL1L2 = 1;
-	int nrOfMBsMissing = 0;
-	int totalConcealed = 0;
-	MBSTATE* MBstate = new MBSTATE[numMB];
-	for (int MBx = 0; MBx < numMB; ++MBx){
-		if (frame->getMacroblock(MBx)->isMissing()){
-			MBstate[MBx] = MISSING;
-			++nrOfMBsMissing;
-		}
-		else{
-			MBstate[MBx] = OK;
-		}
-	}
-	int loop = 0;
-	while (nrOfMBsMissing > 0){
-
-		MBsConcealedL1L2 = 1;
-		while (MBsConcealedL1L2 > 0){
-			MBsConcealedL1 = 1;
-			MBsConcealedL1L2 = 0;
-			while (MBsConcealedL1 > 0){
-				MBsConcealedL1 = 0;
-				for (int MBx = 0; MBx < numMB; ++MBx)
-				{
-					MB = frame->getMacroblock(MBx);
-					exist_t = 1;
-					exist_b = 1;
-					exist_r = 1;
-					exist_l = 1;
-					if (MBstate[MBx] == MISSING)
-					{
-						f( MB, &exist_l,  &exist_r,  &exist_t,  &exist_b, 
-							MBstate,MBx,frame);
-						if (exist_l + exist_r + exist_t + exist_b > 2){
-							//MB->setConcealed();
-							++MBsConcealedL1;
-							++MBsConcealedL1L2;
-							--nrOfMBsMissing;
-							++totalConcealed;
-							MBstate[MBx] = CONCEALED;
-						}
-					}
-				}
-				//zet alle CONCEALED om naar OK
-				for (int MBx = 0; MBx < numMB; ++MBx){
-					if (MBstate[MBx] == CONCEALED){
-						MBstate[MBx] = OK;						
-					}					
-				}
-			}
-			bool oneMBConcealed = false;
-			for (int MBx = 0; MBx < numMB && !oneMBConcealed; ++MBx)
-			{
-				MB = frame->getMacroblock(MBx);
-				exist_t = 1;
-				exist_b = 1;
-				exist_r = 1;
-				exist_l = 1;
-				if (MBstate[MBx] == MISSING)
-				{
-					f( MB, &exist_l,  &exist_r,  &exist_t,  &exist_b, 
-						MBstate,MBx,frame);
-					if (exist_l + exist_r + exist_t + exist_b > 1){
-						//MB->setConcealed();
-						--nrOfMBsMissing;
-						++totalConcealed;
-						MBstate[MBx] = CONCEALED;
-						oneMBConcealed = true;
-						++MBsConcealedL1L2;						
-					}
-				}
-			}
-			//zet alle CONCEALED om naar OK
-			for (int MBx = 0; MBx < numMB; ++MBx){
-				if (MBstate[MBx] == CONCEALED){
-					MBstate[MBx] = OK;						
-				}					
-			}
-		}		
-		bool oneMBConcealed = false;
-		for (int MBx = 0; MBx < numMB && !oneMBConcealed; ++MBx)
-		{
-			MB = frame->getMacroblock(MBx);
-			exist_t = 1;
-			exist_b = 1;
-			exist_r = 1;
-			exist_l = 1;
-			if (MBstate[MBx] == MISSING)
-			{
-				f( MB, &exist_l,  &exist_r,  &exist_t,  &exist_b, 
-					MBstate,MBx,frame);
-				if (exist_l + exist_r + exist_t + exist_b > 0){
-					//MB->setConcealed();
-					--nrOfMBsMissing;
-					++totalConcealed;
-					MBstate[MBx] = CONCEALED;
-					oneMBConcealed = true;
-					++MBsConcealedL1L2;					
-				}
-			}
-		}
-		//zet alle CONCEALED om naar OK
-		for (int MBx = 0; MBx < numMB; ++MBx){
-			if (MBstate[MBx] == CONCEALED){
-				MBstate[MBx] = OK;						
-			}					
-		}
-	}
-}
-void FillMB_temporal_3(Macroblock *MB, Macroblock *tempMB, Macroblock *usedMB, Frame *frame, Frame *referenceFrame){
-	int MBxpos = MB->getXPos();
-	int MBypos = MB->getYPos();
-	for (int i = 0; i < 16; ++i){
-		for (int j = 0; j < 16; ++j){
-			int xposref = (MBxpos*16) + j + usedMB->mv.x;
-			int yposref = (MBypos*16) + i + usedMB->mv.y;
-			if(xposref < 0)
-				xposref = 0;
-			if(xposref > (frame->getWidth() * 16 - 1))
-				xposref = (frame->getWidth() * 16 - 1);
-			if(yposref < 0)
-				yposref = 0;
-			if(yposref > (frame->getHeight() * 16 - 1))
-				yposref = (frame->getHeight() * 16 - 1);
-			tempMB->luma[i][j] = getYPixel(referenceFrame, xposref, yposref);
-			tempMB->cb[i/2][j/2] = getCbPixel(referenceFrame, xposref/2, yposref/2);
-			tempMB->cr[i/2][j/2] = getCrPixel(referenceFrame, xposref/2, yposref/2);
-		}
-	}
-}
-float CheckMB_temporal_3(Macroblock *MB,Macroblock *tempMB, Frame *frame, int MBx){
-	int verschil = 0;
-	int aantalvglnpixels = 0;
-	int MBxpos = MB->getXPos() * 16;
-	int MBypos = MB->getYPos() * 16;				
-	for (int t = 0; t < 16; ++t){
-		if (MB->getYPos() != 0){
-			verschil += abs(tempMB->luma[0][t] - frame->getMacroblock(MBx - frame->getWidth())->luma[15][t]);
-			++aantalvglnpixels;
-		}
-		if (MB->getYPos() != (frame->getHeight() - 1)){
-			verschil += abs(tempMB->luma[15][t] - frame->getMacroblock(MBx + frame->getWidth())->luma[0][t]);
-			++aantalvglnpixels;
-		}
-		if (MB->getXPos() != 0){
-			verschil += abs(tempMB->luma[t][0] - frame->getMacroblock(MBx - 1)->luma[t][15]);
-			++aantalvglnpixels;
-		}
-		if (MB->getXPos() != (frame->getWidth() - 1)){
-			verschil += abs(tempMB->luma[t][15] - frame->getMacroblock(MBx + 1)->luma[t][0]);
-			++aantalvglnpixels;
-		}
-	}
-	float errorperpixel = float(verschil)/aantalvglnpixels;
-	return errorperpixel;
-}
-//enum for the positions
-enum position{pos_TOP,pos_BOT,pos_LEFT,pos_RIGHT};
+//temporal 3
 //return the number of available neighbours for one block.
 int getNeighbours(Frame *frame, const int MBx){
 	Macroblock* mb = frame->getMacroblock(MBx);
@@ -1509,6 +1454,7 @@ int getNeighbours(Frame *frame, const int MBx){
 	bool exists_b = mb->getYPos() < frame->getHeight() - 1 && !frame->getMacroblock(MBx + frame->getWidth())->isMissing();//bot?
 	return exists_l + exists_b + exists_r + exists_t;
 }
+//same as temporal 2 but also possible when multiple adjecent blocks are missing
 void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 	//debug & evaluation
 	startChrono();
@@ -1521,7 +1467,7 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 	const int offset[] = {-frame->getWidth(), frame->getWidth(), -1, 1};
 
 	//Cover up almost everything, then improve the solution.
-	//conceal_spatial_2_zonder_setConcealed(frame);
+	conceal_spatial_2_zonder_setConcealed(frame);
 
 	//determine state && fill queue first time
 	for (int i = 0; i < numMB; i++){
@@ -1547,7 +1493,7 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 				mb = element.second;
 				todo.pop();
 			}
-
+			cout << element.first << endl;
 			if (mb->isMissing()){
 				const int MBx = mb->getMBNum();
 
@@ -1575,5 +1521,3 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 	}
 	std::cout << "\tMissing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
-
-
