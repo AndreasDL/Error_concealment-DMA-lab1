@@ -5,6 +5,7 @@
 #include <math.h>
 #include <iostream>
 #include <ctime>
+#include <stack>
 using namespace std;
 //timing functions
 double starttime;
@@ -1244,6 +1245,8 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int
 		for (int i = 0; i < size; i++){
 			subsize *= 2;
 		}
+		stack<int> todo;//keep track of blocks with big errors
+		MBSTATE* MBstate = new MBSTATE[numMB];
 
 		for (int MBx = 0; MBx < numMB; ++MBx){
 			Macroblock *MB = frame->getMacroblock(MBx);
@@ -1259,9 +1262,32 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, int
 						FillSubBMV(MB, frame, referenceFrame, vec, x, y, subsize);
 					}
 				}
-				MB->setConcealed();
+				float err = CheckMB(MB, frame, MBx);
+				if (err > 20){ //Error too big => use spatial
+					todo.push(MBx);
+					MBstate[MBx] = MISSING;
+				}else{
+					MB->setConcealed();
+					MBstate[MBx] = CONCEALED;
+				}	
 			}
+			MBstate[MBx] = OK;
 		}
+
+		//fix blocks with big errors
+		while (!todo.empty()){
+			int num = todo.top();
+			todo.pop();
+			Macroblock* block = frame->getMacroblock(num);
+			int exists_top = block->getYPos() != 0 ? 1 : 0;
+			int exists_bot = block->getYPos() < frame->getHeight() - 1 ? 1 : 0;
+			int exists_left = block->getXPos() != 0 ? 1 : 0;
+			int exists_right = block->getXPos() < frame->getWidth() - 1 ? 1 : 0;
+			f(block, &exists_left, &exists_right, &exists_top, &exists_bot, MBstate, num, frame);
+			block->setConcealed();
+			MBstate[num] = CONCEALED;
+		}
+		delete[] MBstate;
 	}
 	cout << "\tsize: " << size << " Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
