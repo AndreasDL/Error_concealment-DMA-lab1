@@ -44,7 +44,6 @@ void ErrorConcealer::concealErrors(Frame *frame, Frame *referenceFrame)
 			conceal_temporal_3(frame, referenceFrame);
 			break;
 		case 9:
-			conceal_spatial_4(frame);
 			// To be completed. Add explanatory notes in English.
 		case 10:
 			conceal_spatial_4(frame);
@@ -408,24 +407,35 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame)
 	}
 }
 
+
+// The edge detection function from exercise 2.C is situated in f2. This will be called from within conceal_spatial_3
+
 void f2(Macroblock* MB,
 	int* exist_l, int* exist_r, int* exist_t, int* exist_b,
 	MBSTATE* MBstate,
 	int MBx,
 	Frame *frame){
 
+	// This method is based upon the paper 'XXX YYY ZZZ' by xxx, yyy, zzz (link).
+
+
+	// The used kernels are 2 3x3 Sobel-kernels (1 horizontal and 1 vertical).
 	double kernel_x[3][3] = { { -1, 0, 1 }, { -2, 0, 2 }, { -1, 0, 1 } };
 	double kernel_y[3][3] = { { 1, 2, 1 }, { 0, 0, 0 }, { -1, -2, -1 } };
 
 	int numMB_hor = frame->getWidth();
 	int numMB_ver = frame->getHeight();
 
+	// This boolean will determine whether or not the edge detection method will be used.
+	// In case there are too less MB's available (0 or 1), the conceal_spatial_2 method will be executed. (When there aren't edges available, we won't use edges).
+	bool useConceal2 = false;
 
 	Macroblock* MB_l;
 	Macroblock* MB_r;
 	Macroblock* MB_t;
 	Macroblock* MB_b;
 	MacroblockEmpty* MBEmpty = new MacroblockEmpty();
+
 	//determine MB_l
 	if (MB->getXPos() == 0){
 		MB_l = MBEmpty;
@@ -483,7 +493,10 @@ void f2(Macroblock* MB,
 		}
 	}
 
-	if (*exist_l + *exist_r + *exist_t + *exist_b > 0){
+	// If there are at least 2 edges: perform interpolation.
+	if (*exist_l + *exist_r + *exist_t + *exist_b < 2){
+		f(MB, exist_l, exist_r, exist_t, exist_b, MBstate, MBx, frame);
+	} else if (*exist_l + *exist_r + *exist_t + *exist_b > 0){
 		////////////////////////////////////////////////////////////////////////////////
 		///// 2. Extract edge data by using horizontal and vertical Sobel operator.
 		////////////////////////////////////////////////////////////////////////////////
@@ -519,6 +532,7 @@ void f2(Macroblock* MB,
 		// Calculate gradients and slope for top
 		if (*exist_t == 1){
 			for (int j = 1; j < 15; j++) {
+
 				double gradient_x = MB_t->luma[13][j - 1] * kernel_x[0][0] + MB_t->luma[13][j] * kernel_x[0][1] + MB_t->luma[13][j + 1] * kernel_x[0][2]
 					+ MB_t->luma[14][j - 1] * kernel_x[1][0] + MB_t->luma[14][j + 1] * kernel_x[1][2]
 					+ MB_t->luma[15][j - 1] * kernel_x[2][0] + MB_t->luma[15][j] * kernel_x[2][1] + MB_t->luma[15][j + 1] * kernel_x[2][2];
@@ -530,17 +544,9 @@ void f2(Macroblock* MB,
 				gradient_x /= 4.0;
 				gradient_y /= 4.0;
 
-				// When gradient_y = 0, we will divide by zero during the slope calculation. To avoid this, we set both gradient_x and gradient_y
-				// to zero. During the calculation of the dominant direction, these values will be filtered (has to be > variance).
+				gradients[j - 1 + counter] = pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0);
+				slopes[j - 1 + counter] = 1.0 / tan(gradient_y / gradient_x);
 
-				if (gradient_y != 0){
-					gradients[j - 1 + counter] = pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0);
-					slopes[j - 1 + counter] = 1.0 / tan(gradient_y / gradient_x);
-				}
-				else {
-					gradients[j - 1 + counter] = 0;
-					slopes[j - 1 + counter] = 0;
-				}
 			}
 			counter += 14;
 		}
@@ -552,6 +558,7 @@ void f2(Macroblock* MB,
 				double gradient_x = MB_r->luma[j - 1][0] * kernel_x[0][0] + MB_r->luma[j - 1][1] * kernel_x[0][1] + MB_r->luma[j - 1][2] * kernel_x[0][2]
 					+ MB_r->luma[j][0] * kernel_x[1][0] + MB_r->luma[j][2] * kernel_x[1][2]
 					+ MB_r->luma[j + 1][0] * kernel_x[2][0] + MB_r->luma[j + 1][1] * kernel_x[2][1] + MB_r->luma[j + 1][2] * kernel_x[2][2];
+				
 				double gradient_y = MB_r->luma[j - 1][0] * kernel_y[0][0] + MB_r->luma[j - 1][1] * kernel_y[0][1] + MB_r->luma[j - 1][2] * kernel_y[0][2]
 					+ MB_r->luma[j][0] * kernel_y[1][0] + MB_r->luma[j][2] * kernel_y[1][2]
 					+ MB_r->luma[j + 1][0] * kernel_y[2][0] + MB_r->luma[j + 1][1] * kernel_y[2][1] + MB_r->luma[j + 1][2] * kernel_y[2][2];
@@ -559,16 +566,9 @@ void f2(Macroblock* MB,
 				gradient_x /= 4.0;
 				gradient_y /= 4.0;
 
-				// When gradient_y = 0, we will divide by zero during the slope calculation. To avoid this, we set both gradient_x and gradient_y
-				// to zero. During the calculation of the dominant direction, these values will be filtered (has to be > variance).
-				if (gradient_y != 0){
-					gradients[j - 1 + counter] = pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0);
-					slopes[j - 1 + counter] = 1.0 / tan(gradient_y / gradient_x);
-				}
-				else {
-					gradients[j - 1 + counter] = 0;
-					slopes[j - 1 + counter] = 0;
-				}
+				gradients[j - 1 + counter] = pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0);
+				slopes[j - 1 + counter] = 1.0 / tan(gradient_y / gradient_x);
+
 			}
 			counter += 14;
 		}
@@ -588,16 +588,9 @@ void f2(Macroblock* MB,
 				gradient_x /= 4.0;
 				gradient_y /= 4.0;
 
-				// When gradient_y = 0, we will divide by zero during the slope calculation. To avoid this, we set both gradient_x and gradient_y
-				// to zero. During the calculation of the dominant direction, these values will be filtered (has to be > variance).
-				if (gradient_y != 0){
-					gradients[j - 1 + counter] = pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0);
-					slopes[j - 1 + counter] = 1.0 / tan(gradient_y / gradient_x);
-				}
-				else {
-					gradients[j - 1 + counter] = 0;
-					slopes[j - 1 + counter] = 0;
-				}
+				gradients[j - 1 + counter] = pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0);
+				slopes[j - 1 + counter] = 1.0 / tan(gradient_y / gradient_x);
+
 			}
 			counter += 14;
 		}
@@ -605,6 +598,7 @@ void f2(Macroblock* MB,
 		// Calculate gradients and slope for left
 		if (*exist_l == 1){
 			for (int j = 1; j < 15; j++){
+
 				double gradient_x = MB_l->luma[j - 1][13] * kernel_x[0][0] + MB_l->luma[j - 1][14] * kernel_x[0][1] + MB_l->luma[j - 1][15] * kernel_x[0][2]
 					+ MB_l->luma[j][13] * kernel_x[1][0] + MB_l->luma[j][15] * kernel_x[1][2]
 					+ MB_l->luma[j + 1][13] * kernel_x[2][0] + MB_l->luma[j + 1][14] * kernel_x[2][1] + MB_l->luma[j + 1][15] * kernel_x[2][2];
@@ -616,16 +610,9 @@ void f2(Macroblock* MB,
 				gradient_x /= 4.0;
 				gradient_y /= 4.0;
 
-				// When gradient_y = 0, we will divide by zero during the slope calculation. To avoid this, we set both gradient_x and gradient_y
-				// to zero. During the calculation of the dominant direction, these values will be filtered (has to be > variance).
-				if (gradient_y != 0){
-					gradients[j - 1 + counter] = pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0);
-					slopes[j - 1 + counter] = 1.0 / tan(gradient_y / gradient_x);
-				}
-				else {
-					gradients[j - 1 + counter] = 0;
-					slopes[j - 1 + counter] = 0;
-				}
+				gradients[j - 1 + counter] = pow((pow(gradient_x, 2.0) + pow(gradient_y, 2.0)), 1.0 / 2.0);
+				slopes[j - 1 + counter] = 1.0 / tan(gradient_y / gradient_x);
+			
 			}
 			counter += 14;
 		}
@@ -640,25 +627,32 @@ void f2(Macroblock* MB,
 		double numerator = 0.0;
 		double denominator = 0.0;
 
+		// Calculate the mean of the gradient.
 		double mean = 0.0;
 		for (int j = 0; j < sizeof(*gradients); j++){
 			mean += gradients[j];
 		}
 		mean /= sizeof(*gradients);
 
+		// Calculate the variance of the gradient
 		double variance = 0;
 		for (int j = 0; j < sizeof(*gradients); j++){
 			variance += (gradients[j] - mean) * (gradients[j] - mean);
 		}
 		variance /= (sizeof(*gradients) - 1);
 
+		// If the gradient is larger than the variance, the gradient will be taken into account for the calculation of the dominant direction.
+		// The gradient has to be greater dan zero (but will normally always be, because it also has to be greater than the variance), to avoid dividing by zero.
+		// The slope may not be larger than 16, this is the maximum slope that can be used in a 16x16 macroblock (larger would interpolate pixels from e.g. below to MB to above the MB).
 		for (int j = 0; j < counter; j++){
-			if (gradients[j] > variance && abs(slopes[j]) < 100 && gradients[j] > 0) {
+			if (gradients[j] > variance && abs(slopes[j]) < 16 && gradients[j] > 0) {
 				numerator += abs(gradients[j])*slopes[j];
 				denominator += abs(gradients[j]);
 			}
 		}
 
+
+		// Dominant direction = sum of (gradients*slopes)/sum of gradients (== weighted with gradient magnitude!) 
 		double dominant_direction = numerator*1.0 / denominator*1.0;
 
 		if (numerator == 0 || denominator == 0){
@@ -669,10 +663,13 @@ void f2(Macroblock* MB,
 		/////// 4. Perform interpolation
 		//////////////////////////////////////////////////////////////////////////////////
 
-		//// For now, the interpolation is implemented with 1 direction. It is possible to divide 4, 8 (or another number) of dominant directions
+		//// The interpolation is now implemented with 1 main direction. It is possible to define 4, 8 (or another number) of dominant directions
 		//// to partition the macroblock in more segments. This should yield better results.
 
 		double slope = 1.0 / tan(dominant_direction);
+
+
+		// The absolute value of the slope can't be greater than 16, because of the fact that a slope greater than 16 can't be interpolated within a 16x16 MB.
 		if (slope > 16.0){
 			slope = 16.0;
 		}
@@ -707,7 +704,7 @@ void f2(Macroblock* MB,
 				// P1
 				/////////////
 
-				if (slope_rel > 0){	// P1 will be part of the left or upper MB.
+				if (slope_rel > 0){						// P1 will be part of the left or upper MB.
 
 					int delta_y = j;
 					if (delta_y % 2 != 0) delta_y++;
@@ -717,43 +714,45 @@ void f2(Macroblock* MB,
 					if (delta_x % 2 != 0) delta_x--;
 					int d1_y_temp = delta_x * slope_rel;
 
-					if (d1_x_temp < d1_y_temp){
+					if (d1_x_temp < d1_y_temp){			// p1 is part of the left MB
 						d1_x = d1_x_temp;
 						d1_y = j;
 
 						int xcoord = k - d1_x;
 						if (xcoord < 0) xcoord = 0;
 
-						if (*exist_t == 1){		// 
+						if (*exist_t == 1){				// If the necessary pixel exists, conceal with edge data.
 							p1_luma = MB_t->luma[15][xcoord];
 						}
-						else if (*exist_l == 1){
+						else if (*exist_l == 1){		// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p1_luma = MB_l->luma[0][15];
 						}
-						else {
+						else {							// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p1_luma = 0;
 						}
 					}
-					else {
+					else {								// p1 is part of the right MB.
 						d1_x = k;
 						d1_y = d1_y_temp;
 
-						if (*exist_l == 1){
-
+						if (*exist_l == 1){				// If the necessary pixel exists, conceal with edge data.
 							int ycoord = j - d1_y;
 							if (ycoord < 0) ycoord = 0;
-
 							p1_luma = MB_l->luma[ycoord][15];
 						}
-						else if (*exist_t == 1){
+						else if (*exist_t == 1){		// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p1_luma = MB_t->luma[15][0];
 						}
-						else {
+						else {							// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p1_luma = 128;
 						}
 					}
 				}
-				else { // P1 will be part of the left or lower MB.
+				else {									// P1 will be part of the left or lower MB.
 					int delta_y = 16 - j;
 					if (delta_y % 2 != 0) delta_y++;
 					int d1_x_temp = delta_y / abs(slope_rel);
@@ -762,35 +761,39 @@ void f2(Macroblock* MB,
 					if (delta_x % 2 != 0) delta_x--;
 					int d1_y_temp = delta_x * abs(slope_rel);
 
-					if (d1_x_temp < d1_y_temp){					// A pixel from the bottom macroblock should be interpolated
+					if (d1_x_temp < d1_y_temp){					// p1 is part of the lower macroblock.
 						d1_x = d1_x_temp;
-						d1_y = 16 - j;
-						if (*exist_b == 1){
+						d1_y = 16 - j;	
+						if (*exist_b == 1){						// If the necessary pixel exists, conceal with edge data.
 							int xcoord = k - d1_x;
 							if (xcoord < 0) xcoord = 0;
 							p1_luma = MB_b->luma[0][xcoord];
 						}
-						else if (*exist_l == 1){
+						else if (*exist_l == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p1_luma = MB_l->luma[15][15];		// When bottom doesn't exist, we take the closest edge pixel that might be available: p(15,15) of the left MB.
 						}
-						else {
+						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p1_luma = 128;						// When none of the above are available, we take a 'neutral' value of 128.
 						}
 					}
-					else {										// A pixel from the left macroblock should be interpolated
+					else {										// p1 is part of the left macroblock.
 						d1_x = k;
 						d1_y = d1_y_temp;
 
-						if (*exist_l == 1){
+						if (*exist_l == 1){						// If the necessary pixel exists, conceal with edge data.
 
 							int ycoord = j + d1_y;
 							if (ycoord > 15) ycoord = 15;
 							p1_luma = MB_l->luma[ycoord][15];
 						}
-						else if (*exist_b == 1){
+						else if (*exist_b == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p1_luma = MB_b->luma[0][0];
 						}
-						else {
+						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;		
 							p1_luma = 128;
 						}
 					}
@@ -800,7 +803,7 @@ void f2(Macroblock* MB,
 				// P2
 				/////////////
 
-				if (slope_rel > 0){				// When slope < 0, p2 will be part of the right or lower MB.
+				if (slope_rel > 0){								// When slope < 0, p2 will be part of the right or lower MB.
 
 					int delta_y = 16 - j;
 					if (delta_y % 2 != 0) delta_y++;
@@ -810,35 +813,45 @@ void f2(Macroblock* MB,
 					if (delta_x % 2 != 0) delta_x--;
 					int d2_y_temp = delta_x * slope_rel;
 
-					if (d2_x_temp < d2_y_temp){
+					if (d2_x_temp < d2_y_temp){					// p2 is part of the lower macroblock.
 						d2_x = d2_x_temp;
 						d2_y = 16 - j;
 
-						if (*exist_b == 1){
+						if (*exist_b == 1){						// If the necessary pixel exists, conceal with edge data.
 							int xcoord = k + d2_x;
 							if (xcoord > 15) xcoord = 15;
 							p2_luma = MB_b->luma[0][xcoord];
 						}
-						else {
-							p2_luma = p1_luma;	// When lower or right block doesn't exist, we interpolate between p1 and p1...
+						else if (*exist_r == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;	
+							p2_luma = MB_r->luma[15][0];
+						}
+						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
+							p2_luma = p1_luma;					// When lower or right block doesn't exist, we interpolate between p1 and p1...
 						}
 					}
-					else {							// Slope > 0, p2 will be part of the right or upper MB
+					else {										// p2 is part of the right macroblock.
 						d2_x = 16 - k;
 						d2_y = d2_y_temp;
-						if (*exist_r == 1){
+						if (*exist_r == 1){						// If the necessary pixel exists, conceal with edge data.
 							int ycoord = j + d2_y;
 							if (ycoord > 15) ycoord = 15;
 							p2_luma = MB_r->luma[ycoord][0];
 						}
-						else {
+						else if (*exist_l == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
+							p2_luma = MB_l->luma[0][15];
+						}
+						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p2_luma = p1_luma;
 						}
 					}
 
 				}
 
-				else {	// When slope < 1, p1 will be part of the upper or right border.
+				else {											// When slope < 1, p1 will be part of the upper or right macroblock.
 					int delta_y = j;
 					if (delta_y % 2 != 0) delta_y++;
 					int d2_x_temp = delta_y / abs(slope_rel);
@@ -847,31 +860,44 @@ void f2(Macroblock* MB,
 					if (delta_x % 2 != 0) delta_x--;
 					int d2_y_temp = delta_x * abs(slope_rel);
 
-					if (d2_x_temp < d2_y_temp){	// p2 will be in the upper macroblock
+					if (d2_x_temp < d2_y_temp){					// p2 will be in the upper macroblock
 						d2_x = d2_x_temp;
 						d2_y = j;
-						if (*exist_t == 1){
+						if (*exist_t == 1){						// If the necessary pixel exists, conceal with edge data.
 							int xcoord = k + d2_x;
 							if (xcoord > 15) xcoord = 15;
 							p2_luma = MB_t->luma[15][xcoord];
 						}
-						else {
+						else if (*exist_r == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
+							p2_luma = MB_r->luma[0][0];
+						}
+						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p2_luma = p1_luma;
 						}
 					}
-					else {
+					else {										// p2 will be part of the right macroblock.
 						d2_x = 16 - k;
 						d2_y = d2_y_temp;
 						int ycoord = j - d2_y;
 						if (ycoord < 0) ycoord = 0;
-						if (*exist_r == 1){
+						if (*exist_r == 1){						// If the necessary pixel exists, conceal with edge data.
 							p2_luma = MB_r->luma[ycoord][0];
 						}
-						else {
+						else if (*exist_t == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
+							p2_luma = MB_t->luma[15][15];
+						}
+						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)						
+							useConceal2 = true;
 							p2_luma = p1_luma;
 						}
 					}
 				}
+
+				// d1 = distance to p1, d2 = distance to p2.
+				// d = sqrt(d1_x² + d1_y²)
 
 				double d1 = pow(pow(d1_x*1.0, 2) + pow(d1_y*1.0, 2), 1.0 / 2.0);
 				double d2 = pow(pow(d2_x*1.0, 2) + pow(d2_y*1.0, 2), 1.0 / 2.0);
@@ -881,6 +907,7 @@ void f2(Macroblock* MB,
 					d2++;
 				}
 
+				// Save the outcome of the luma calculations in the pixel of the macroblock.
 				MB->luma[j][k] = 1.0 / (d1*1.0 + d2*1.0) * (d2*1.0*p1_luma + d1*1.0*p2_luma);
 
 			}
@@ -916,7 +943,7 @@ void f2(Macroblock* MB,
 				// P1
 				/////////////
 
-				if (slope_rel > 0){	// P1 will be part of the left or upper MB.
+				if (slope_rel > 0){								// p1 will be part of the left or upper MB.
 					int delta_y = j;
 					if (delta_y % 2 != 0) delta_y++;
 					int d1_x_temp = delta_y / slope_rel;
@@ -925,47 +952,51 @@ void f2(Macroblock* MB,
 					if (delta_x % 2 != 0) delta_x--;
 					int d1_y_temp = delta_x * slope_rel;
 
-					if (d1_x_temp < d1_y_temp){		// p1 will be part of the upper MB.
+					if (d1_x_temp < d1_y_temp){					// p1 will be part of the upper MB.
 						d1_x = d1_x_temp;
 						d1_y = j;
-						if (*exist_t == 1){
+						if (*exist_t == 1){						// If the necessary pixel exists, conceal with edge data.
 							int xcoord = k - d1_x;
 							if (xcoord < 0) xcoord = 0;
 
 							p1_cb = MB_t->cb[7][xcoord];
 							p1_cr = MB_t->cr[7][xcoord];
 						}
-						else if (*exist_l == 1){
+						else if (*exist_l == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p1_cb = MB_l->cb[0][7];
 							p1_cr = MB_l->cr[0][7];
 						}
-						else{
+						else{									// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p1_cb = 0;
 							p1_cr = 0;
 						}
 					}
-					else {							// p2 will be part of the left MB.
+					else {										// p2 will be part of the left MB.
 						d1_x = k;
 						d1_y = d1_y_temp;
 
 						int ycoord = j - d1_y;
 						if (ycoord < 0) ycoord = 0;
 
-						if (*exist_l == 1){
+						if (*exist_l == 1){						// If the necessary pixel exists, conceal with edge data.
 							p1_cb = MB_l->cb[ycoord][7];
 							p1_cr = MB_l->cr[ycoord][7];
 						}
-						else if (*exist_t == 1){
+						else if (*exist_t == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p1_cb = MB_t->cb[7][0];
 							p1_cr = MB_t->cr[7][0];
 						}
-						else {
+						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p1_cb = 0;
 							p1_cr = 0;
 						}
 					}
 				}
-				else {								// p1 will be part of the left or lower MB.
+				else {											// p1 will be part of the left or lower MB.
 					int delta_y = 8 - j;
 					if (delta_y % 2 != 0) delta_y++;
 					int d1_x_temp = delta_y / abs(slope_rel);
@@ -974,38 +1005,42 @@ void f2(Macroblock* MB,
 					if (delta_x % 2 != 0) delta_x--;
 					int d1_y_temp = delta_x * abs(slope_rel);
 
-					if (d1_x_temp < d1_y_temp){		// p1 will be part of the lower MB.
+					if (d1_x_temp < d1_y_temp){					// p1 will be part of the lower MB.
 						d1_x = d1_x_temp;
 						d1_y = 8 - j;
-						if (*exist_b == 1){
+						if (*exist_b == 1){						// If the necessary pixel exists, conceal with edge data.
 							int xcoord = k - d1_x;
 							if (xcoord < 0) xcoord = 0;
 							p1_cb = MB_b->cb[0][xcoord];
 							p1_cr = MB_b->cr[0][xcoord];
 						}
-						else if (*exist_l == 1){
-							p1_cb = MB_l->cb[7][7];		// When bottom doesn't exist, we take the closest edge pixel that will might be available: p(7,7) of the left MB.
+						else if (*exist_l == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
+							p1_cb = MB_l->cb[7][7];					// When bottom doesn't exist, we take the closest edge pixel that will might be available: p(7,7) of the left MB.
 							p1_cr = MB_l->cr[7][7];
 						}
-						else {
+						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p1_cb = 0;
 							p1_cr = 0;
 						}
-					}								// p1 will be part of the left MB.
+					}											// p1 will be part of the left MB.
 					else {
 						d1_x = k;
 						d1_y = d1_y_temp;
 						int ycoord = j + d1_y;
 						if (ycoord > 7) ycoord = 7;
-						if (*exist_l == 1){
+						if (*exist_l == 1){						// If the necessary pixel exists, conceal with edge data.
 							p1_cb = MB_l->cb[ycoord][7];
 							p1_cr = MB_l->cr[ycoord][7];
 						}
-						else if (*exist_b == 1){
+						else if (*exist_b == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p1_cb = MB_b->cb[0][0];
 							p1_cr = MB_b->cr[0][0];
 						}
-						else{
+						else{									// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p1_cb = 0;
 							p1_cr = 0;
 						}
@@ -1016,7 +1051,7 @@ void f2(Macroblock* MB,
 				// P2
 				/////////////
 
-				if (slope_rel > 0){				// When slope < 0, p2 will be part of the right or lower MB.
+				if (slope_rel > 0){								// When slope > 0, p2 will be part of the right or lower MB.
 					int delta_y = 8 - j;
 					if (delta_y % 2 != 0) delta_y++;
 					int d2_x_temp = delta_y / slope_rel;
@@ -1025,37 +1060,49 @@ void f2(Macroblock* MB,
 					if (delta_x % 2 != 0) delta_x--;
 					int d2_y_temp = delta_x * slope_rel;
 
-					if (d2_x_temp < d2_y_temp){		// p2 will be part of the lower MB.
+					if (d2_x_temp < d2_y_temp){					// p2 will be part of the lower MB.
 						d2_x = d2_x_temp;
 						d2_y = 8 - j;
-						if (*exist_b == 1){
+						if (*exist_b == 1){						// If the necessary pixel exists, conceal with edge data.
 							int xcoord = k + d2_x;
 							if (xcoord > 7) xcoord = 7;
 							p2_cb = MB_b->cb[0][xcoord];
 							p2_cr = MB_b->cr[0][xcoord];
 						}
-						else {
-							p2_cb = p1_cb;	// When lower or right block doesn't exist, we interpolate between p1 and p1, which will extend the existing edges.
+						else if (*exist_r == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)	
+							useConceal2 = true;
+							p2_cb = MB_r->cb[7][0];
+							p2_cr = MB_r->cr[7][0];
+						}
+						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
+							p2_cb = p1_cb;							// When lower or right block doesn't exist, we interpolate between p1 and p1, which will extend the existing edges.
 							p2_cr = p1_cr;
 						}
 					}
-					else {							// p2 will be part of the right MB.
+					else {										// p2 will be part of the right MB.
 						d2_x = 8 - k;
 						d2_y = d2_y_temp;
-						if (*exist_r == 1){
+						if (*exist_r == 1){						// If the necessary pixel exists, conceal with edge data.
 							int ycoord = j + d2_y;
 							if (ycoord > 7) ycoord = 7;
 							p2_cb = MB_r->cb[ycoord][0];
 							p2_cr = MB_r->cr[ycoord][0];
 						}
-						else {
+						else if (*exist_l == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)	
+							useConceal2 = true;
+							p2_cb = MB_l->cb[0][7];
+							p2_cr = MB_l->cr[0][7];
+						}
+						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)
+							useConceal2 = true;
 							p2_cb = p1_cb;
 							p2_cr = p1_cr;
 						}
 					}
 
 				}
-				else {	// When slope < 1, p1 will be part of the upper or right border.
+				else {											// When slope < 0, p1 will be part of the upper or right border.
 					int delta_y = j;
 					if (delta_y % 2 != 0) delta_y++;
 					int d2_x_temp = delta_y / abs(slope_rel);
@@ -1064,54 +1111,78 @@ void f2(Macroblock* MB,
 					if (delta_x % 2 != 0) delta_x--;
 					int d2_y_temp = delta_x * abs(slope_rel);
 
-					if (d2_x_temp < d2_y_temp){	// p2 will be part of the upper macroblock.
+					if (d2_x_temp < d2_y_temp){					// p2 will be part of the upper macroblock.
 						d2_x = d2_x_temp;
 						d2_y = j;
-						if (*exist_t == 1){
+						if (*exist_t == 1){						// If the necessary pixel exists, conceal with edge data.
 							int xcoord = k + d2_x;
 							if (xcoord > 7) xcoord = 7;
 							p2_cb = MB_t->cb[7][xcoord];
 							p2_cr = MB_t->cr[7][xcoord];
 						}
-						else {
+						else if (*exist_r == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)	
+							useConceal2 = true;
+							p2_cb = MB_r->cb[0][0];
+							p2_cr = MB_r->cr[0][0];
+						}	
+						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)	
+							useConceal2 = true;
 							p2_cb = p1_cb;
 							p2_cr = p1_cr;
 						}
 					}
-					else {						// p2 will be part of the right macroblock.
+					else {										// p2 will be part of the right macroblock.
 						d2_x = 8 - k;
 						d2_y = d2_y_temp;
-						if (*exist_r == 1){
+						if (*exist_r == 1){						// If the necessary pixel exists, conceal with edge data.
 							int ycoord = j - d2_y;
 							if (ycoord < 0) ycoord = 0;
 							p2_cb = MB_r->cb[ycoord][0];
 							p2_cr = MB_r->cr[ycoord][0];
 						}
-						else {
+						else if (*exist_t == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)	
+							useConceal2 = true;
+							p2_cb = MB_t->cb[7][7];
+							p2_cr = MB_t->cr[7][7];
+						}
+						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)	
+							useConceal2 = true;
 							p2_cb = p1_cb;
 							p2_cr = p1_cr;
 						}
 					}
 				}
 
+
+				// d1 = distance to p1, d2 = distance to p2.
+				// d = sqrt(d1_x² + d1_y²)
 				double d1 = pow(pow(d1_x*1.0, 2) + pow(d1_y*1.0, 2), 1.0 / 2.0);
 				double d2 = pow(pow(d2_x*1.0, 2) + pow(d2_y*1.0, 2), 1.0 / 2.0);
 
-				if (d1 == 0 && d2 == 0){
+				if (d1 == 0 && d2 == 0){	// When both distances are zero, the interpolation formula will result in 0/0. We give both distance the same weight to solve this issue.
 					d1++;
 					d2++;
 				}
 
+				// Save the outcomes of the cb an cr calculations in the pixel of the macroblock.
 				MB->cb[j][k] = 1.0 / (d1*1.0 + d2*1.0) * (d2*1.0*p1_cb + d1*1.0*p2_cb);
 				MB->cr[j][k] = 1.0 / (d1*1.0 + d2*1.0) * (d2*1.0*p1_cr + d1*1.0*p2_cr);
+
 			}
 		}
 	}
+
+	if (useConceal2){		// When useConceal2 was set during the calculations, conceal spatially without edge data (conceal_spatial_2).
+		f(MB, exist_l, exist_r, exist_t, exist_b, MBstate, MBx, frame);
+	}
+
 	delete MBEmpty;
 }
 
 void ErrorConcealer::conceal_spatial_4(Frame *frame)
 {
+	// This method is the same is in conceal_spatial_2, to optimally deal with the complex error pattern.
+
 	int numMB = frame->getNumMB();
 	Macroblock* MB;
 	int exist_t = 1;
@@ -1152,13 +1223,15 @@ void ErrorConcealer::conceal_spatial_4(Frame *frame)
 					{
 						f2(MB, &exist_l, &exist_r, &exist_t, &exist_b,
 							MBstate, MBx, frame);
-						if (exist_l + exist_r + exist_t + exist_b > 2){
+						if (exist_l + exist_r + exist_t + exist_b > 2){		// First commit concealment of the macroblocks with at least 3 existing neighbour macroblocks.
 							MB->setConcealed();
 							++MBsConcealedL1;
 							++MBsConcealedL1L2;
 							--nrOfMBsMissing;
 							++totalConcealed;
+
 							MBstate[MBx] = CONCEALED;
+
 						}
 					}
 				}
@@ -1181,7 +1254,7 @@ void ErrorConcealer::conceal_spatial_4(Frame *frame)
 				{
 					f2(MB, &exist_l, &exist_r, &exist_t, &exist_b,
 						MBstate, MBx, frame);
-					if (exist_l + exist_r + exist_t + exist_b > 1){
+					if (exist_l + exist_r + exist_t + exist_b > 1){			// Commit concealment of the macroblocks with at least 2 existing neighbour macroblocks.
 						MB->setConcealed();
 						--nrOfMBsMissing;
 						++totalConcealed;
@@ -1210,7 +1283,7 @@ void ErrorConcealer::conceal_spatial_4(Frame *frame)
 			{
 				f2(MB, &exist_l, &exist_r, &exist_t, &exist_b,
 					MBstate, MBx, frame);
-				if (exist_l + exist_r + exist_t + exist_b > 0){
+				if (exist_l + exist_r + exist_t + exist_b > 0){			// Commit concealment of macroblocks with at least 1 neighbour.
 					MB->setConcealed();
 					--nrOfMBsMissing;
 					++totalConcealed;
