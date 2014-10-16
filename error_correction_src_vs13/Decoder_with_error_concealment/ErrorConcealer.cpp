@@ -6,8 +6,9 @@
 #include <iostream>
 #include <ctime>
 #include <stack>
+#include <queue>
 using namespace std;
-//timing functions
+//timing functions for debugging and evaluation purposes only!
 double starttime;
 void startChrono(){
 	starttime = double(clock()) / CLOCKS_PER_SEC;
@@ -15,6 +16,7 @@ void startChrono(){
 double stopChrono(){
 	return (double(clock()) / CLOCKS_PER_SEC ) -starttime;
 }
+
 ErrorConcealer::ErrorConcealer(short conceal_method){
 	this->conceal_method = conceal_method;
 }
@@ -1206,30 +1208,37 @@ MotionVector getMV(Frame* frame, const int MBx, const int sub_x, const int sub_y
 	right = exists_right ? frame->getMacroblock(MBx +1 )->mv : notthere;
 
 	//x
+	int denominator = ((16 - sub_x) / subsize)*exists_left +
+		(sub_x / subsize)*exists_right +
+		((16 - sub_y) / subsize)*exists_top +
+		(sub_y / subsize)*exists_bot;
+	if (denominator == 0)
+		denominator = 1;
+
 	mv.x = (
 		(((16 - sub_x) / subsize)*left.x) +
 		((sub_x / subsize)*right.x) +
 		(((16 - sub_y) / subsize)*top.x) +
 		((sub_y / subsize)*bot.x)
-		) / (
-		((16 - sub_x) / subsize)*exists_left +
-		(sub_x / subsize)*exists_right +
-		((16 - sub_y) / subsize)*exists_top +
-		(sub_y / subsize)*exists_bot
-		);
+		) / denominator;
 
 	//y
+	denominator = ((16 - sub_x) / subsize)*exists_left +
+		(sub_x / subsize)*exists_right +
+		((16 - sub_y) / subsize)*exists_top +
+		(sub_y / subsize)*exists_bot;
+	if (denominator == 0)
+		denominator = 1;
+	
+
 	mv.y = (
 		(((16 - sub_x) / subsize)*left.y) +
 		((sub_x / subsize)*right.y) +
 		(((16 - sub_y) / subsize)*top.y) +
 		((sub_y / subsize)*bot.y)
-		) / (
-		((16 - sub_x) / subsize)*exists_left +
-		(sub_x / subsize)*exists_right +
-		((16 - sub_y) / subsize)*exists_top +
-		(sub_y / subsize)*exists_bot
-		);
+		) / denominator;
+
+
 	return mv;
 }
 //conceals a macroblock by using motion estimation from 3B and returns the error
@@ -1246,6 +1255,7 @@ float ErrorConcealer::conceal_temporal_2_block(Frame *frame, Frame* referenceFra
 	}
 	return CheckMB(MB, frame, MBx);
 }
+//conceals all subblock by first using motion estimation. If the error is too high then spatial interpollation is used.
 void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame,const int size){
 	startChrono();
 	int missing = 0;
@@ -1484,56 +1494,71 @@ float CheckMB_temporal_3(Macroblock *MB,Macroblock *tempMB, Frame *frame, int MB
 	return errorperpixel;
 }
 void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
-	/*
-	conceal_spatial_2_zonder_setConcealed(frame);
-	float error = 99999999;
-	int numMB = frame->getNumMB();
-	Macroblock *usedMB; //MB in same frame, used for MV (TOP, BOTTOM,...)
-	Macroblock tempMB;
+	startChrono();
+	int missing = 0;
+	//conceal_spatial_2_zonder_setConcealed(frame);
+	const int numMB = frame->getNumMB();
+	MBSTATE* mbstate = new MBSTATE[numMB];
+	queue<int> todo;
 
-	for (int MBx = 0; MBx < numMB; ++MBx){
-		Macroblock* MB = frame->getMacroblock(MBx);
-		if (MB->isMissing()){
-			//how many neighbours are there?
-			//4 => Fix try to use motion
-			
-			//3 => fix
-
-			Macroblock *MB = frame->getMacroblock(MBx);
-
-
-			//check spatial
-			//float errorperpixel = CheckMB_temporal_3(MB,MB, frame, MBx);
-			if(error > 25){
-				bestResult = SPATIAL;
-			}
-			switch (bestResult){
-				case TOP:
-					usedMB = frame->getMacroblock(MBx - frame->getWidth());
-					FillMB(MB, usedMB, frame, referenceFrame);
-					//printf("T");
-					break;
-				case BOTTOM:
-					usedMB = frame->getMacroblock(MBx + frame->getWidth());
-					FillMB(MB, usedMB, frame, referenceFrame);
-					//printf("B");
-					break;
-				case LEFT:
-					usedMB = frame->getMacroblock(MBx - 1);
-					FillMB(MB, usedMB, frame, referenceFrame);
-					//printf("L");
-					break;
-				case RIGHT:
-					usedMB = frame->getMacroblock(MBx + 1);
-					FillMB(MB, usedMB, frame, referenceFrame);
-					//printf("R");
-					break;	
-				case SPATIAL:
-					//printf("S");
-					break;	
-			}
+	//determine state 
+	for (int i = 0; i < numMB; i++){
+		if (frame->getMacroblock(i)->isMissing()){
+			mbstate[i] = MISSING;
+			//TODO put in queue we don't want to loop b/C that is too slow
+			todo.push(i);
+			missing++;
+		}else{
+			mbstate[i] = OK;
 		}
-	}*/
+	}
+
+	
+	int submiss = missing;
+	int prevmiss = missing + 1;
+
+	//fix blocks with 3 or 4 available neighbours
+	while (!todo.empty() && prevmiss > submiss){
+		prevmiss = submiss;
+		int i = todo.front();
+		todo.pop();
+		
+		Macroblock* mb = frame->getMacroblock(i);
+			
+		//what blocks exists
+		int exists_l = mb->getXPos() != 0; //&& !frame->getMacroblock(i - 1)->isMissing();//left?
+		int exists_r = mb->getXPos() < frame->getWidth() - 1; //&& !frame->getMacroblock(i + 1)->isMissing();//right?
+		int exists_t = mb->getYPos() != 0;// && !frame->getMacroblock(i - frame->getWidth())->isMissing();//top?
+		int exists_b = mb->getYPos() < frame->getHeight() - 1;// && !frame->getMacroblock(i + frame->getWidth())->isMissing();//bot?
+
+		//how many available neighbours do we have?
+		int neighbours = 0;
+		if (exists_l && frame->getMacroblock(i - 1)->state != MISSING )
+			neighbours++;
+		if (exists_r && frame->getMacroblock(i + 1)->state != MISSING)
+			neighbours++;
+		if (exists_t && frame->getMacroblock(i - frame->getWidth())->state != MISSING)
+			neighbours++;
+		if (exists_b && frame->getMacroblock(i + frame->getWidth())->state != MISSING)
+			neighbours++;
+
+		//3||4 neighbours => FIX : try fastmotion & check error
+		//corners will never have more then 2 neighbours => Corner? fix when 2 neighbours are there
+		if ( neighbours > 2 ){
+			if (conceal_temporal_2_block(frame, referenceFrame, mb, i, 2) > 25){
+				//error too big => use spatial
+				f(mb, &exists_l, &exists_r, &exists_t, &exists_b, mbstate, i, frame);
+			}
+			mbstate[i] = CONCEALED;
+			submiss--;
+		}else{
+			mbstate[i] = MISSING;
+			todo.push(i);
+		}
+	}
+	//fix one block of size 2 && retry others
+
+	std::cout << "\tMissing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
 
 
