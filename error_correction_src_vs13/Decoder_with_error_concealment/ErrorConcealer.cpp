@@ -103,6 +103,10 @@ double stopChrono(){
 //*****************************************************************************************************
 //No adjacent blocks missing, use interpolate with the 2 closest pixels to solve this.
 void ErrorConcealer::conceal_spatial_1(Frame *frame){
+	//debug & evaluation
+	startChrono();
+	int missing = 0;
+
 	int numMB = frame->getNumMB();
 	Macroblock* MB;
 	Macroblock* MB_l;
@@ -123,6 +127,7 @@ void ErrorConcealer::conceal_spatial_1(Frame *frame){
 		exist_l = 1;
 		if (MB->isMissing())
 		{
+			missing++;
 			//determine MB_l
 			if (MB->getXPos() == 0){
 				MB_l = MBEmpty;
@@ -238,6 +243,8 @@ void ErrorConcealer::conceal_spatial_1(Frame *frame){
 		}
 	}
 	delete MBEmpty;
+
+	std::cout << "\t[Spatial 1] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
 
 //fix method for conceal_spatial_2
@@ -398,6 +405,10 @@ void f(Macroblock* MB,int* exist_l, int* exist_r, int* exist_t, int* exist_b,MBS
 }
 //can fix even if adjacent blocks are missing
 void ErrorConcealer::conceal_spatial_2(Frame *frame,const bool setConcealed){
+	//debug & evaluation
+	startChrono();
+	int missing = 0;
+
 	int numMB = frame->getNumMB();
 	Macroblock* MB;
 	int exist_t = 1;
@@ -413,8 +424,8 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame,const bool setConcealed){
 		if (frame->getMacroblock(MBx)->isMissing()){
 			MBstate[MBx] = MISSING;
 			++nrOfMBsMissing;
-		}
-		else{
+			missing++;
+		}else{
 			MBstate[MBx] = OK;
 		}
 	}
@@ -439,7 +450,8 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame,const bool setConcealed){
 						f(MB, &exist_l, &exist_r, &exist_t, &exist_b,
 							MBstate, MBx, 2, frame);
 						if (exist_l + exist_r + exist_t + exist_b > 2){
-							MB->setConcealed();
+							if (setConcealed)
+								MB->setConcealed();
 							++MBsConcealedL1;
 							++MBsConcealedL1L2;
 							--nrOfMBsMissing;
@@ -456,8 +468,7 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame,const bool setConcealed){
 				}
 			}
 			bool oneMBConcealed = false;
-			for (int MBx = 0; MBx < numMB && !oneMBConcealed; ++MBx)
-			{
+			for (int MBx = 0; MBx < numMB && !oneMBConcealed; ++MBx){
 				MB = frame->getMacroblock(MBx);
 				exist_t = 1;
 				exist_b = 1;
@@ -468,7 +479,8 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame,const bool setConcealed){
 					f(MB, &exist_l, &exist_r, &exist_t, &exist_b,
 						MBstate, MBx, 1, frame);
 					if (exist_l + exist_r + exist_t + exist_b > 1){
-						MB->setConcealed();
+						if (setConcealed)
+							MB->setConcealed();
 						--nrOfMBsMissing;
 						++totalConcealed;
 						MBstate[MBx] = CONCEALED;
@@ -485,19 +497,18 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame,const bool setConcealed){
 			}
 		}
 		bool oneMBConcealed = false;
-		for (int MBx = 0; MBx < numMB && !oneMBConcealed; ++MBx)
-		{
+		for (int MBx = 0; MBx < numMB && !oneMBConcealed; ++MBx){
 			MB = frame->getMacroblock(MBx);
 			exist_t = 1;
 			exist_b = 1;
 			exist_r = 1;
 			exist_l = 1;
-			if (MBstate[MBx] == MISSING)
-			{
+			if (MBstate[MBx] == MISSING){
 				f(MB, &exist_l, &exist_r, &exist_t, &exist_b,
 					MBstate, MBx, 0, frame);
 				if (exist_l + exist_r + exist_t + exist_b > 0){
-					MB->setConcealed();
+					if (setConcealed)
+						MB->setConcealed();
 					--nrOfMBsMissing;
 					++totalConcealed;
 					MBstate[MBx] = CONCEALED;
@@ -513,6 +524,7 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame,const bool setConcealed){
 			}
 		}
 	}
+	std::cout << "\t[Spatial 2] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
 //uses edge information
 void ErrorConcealer::conceal_spatial_3(Frame *frame){
@@ -1189,10 +1201,15 @@ void ErrorConcealer::conceal_spatial_3(Frame *frame){
 
 //assume no motion & use previous block
 void ErrorConcealer::conceal_temporal_1(Frame *frame, Frame *referenceFrame){
+	//debug & evaluation
+	startChrono();
+	int missing = 0;
+
 	//block missing? use previous block (assume no motion in block)
 	int numMB = frame->getNumMB();
 	for (int MBx = 0; MBx < numMB; ++MBx){
 		if (frame->getMacroblock(MBx)->isMissing()){
+			missing++;
 			Macroblock *MB = frame->getMacroblock(MBx);
 			Macroblock *MBref = referenceFrame->getMacroblock(MBx);
 			for (int i = 0; i < 16; ++i)	{
@@ -1204,6 +1221,7 @@ void ErrorConcealer::conceal_temporal_1(Frame *frame, Frame *referenceFrame){
 			}
 		}
 	}
+	std::cout << "\t[temporal 1] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
 
 //temporal 2
@@ -1330,9 +1348,8 @@ float conceal_temporal_2_macroblock(Frame *frame, Frame* referenceFrame,Macroblo
 	return CheckMB(MB, frame, MBx);
 }
 //conceals all subblock by first using motion estimation. If the error is too high then spatial interpollation is used.
-
 void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame,const int size){
-	/*
+
 	startChrono();
 	int missing = 0;
 	if (!frame->is_p_frame()){
@@ -1373,14 +1390,13 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame,cons
 			int exists_bot = block->getYPos() < frame->getHeight() - 1 ? 1 : 0;
 			int exists_left = block->getXPos() != 0 ? 1 : 0;
 			int exists_right = block->getXPos() < frame->getWidth() - 1 ? 1 : 0;
-			f(block, &exists_left, &exists_right, &exists_top, &exists_bot, MBstate, num, frame);
+			f(block, &exists_left, &exists_right, &exists_top, &exists_bot, MBstate, num,getNeighbours(frame,num), frame);
 			block->setConcealed();
 			MBstate[num] = CONCEALED;
 		}
 		delete[] MBstate;
 	}
-	std::cout << "\tsize: " << size << " Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
-	*/
+	std::cout << "\t[temporal 2 (" << size << ")] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
 
 float conceal_temporal_2_subblock(Frame * frame, Frame * referenceFrame, Macroblock* mb, const int subsize, const int _x, const int _y){
@@ -1427,11 +1443,11 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 	//init
 	const int numMB = frame->getNumMB();
 	MBSTATE* mbstate = new MBSTATE[numMB];
-	priority_queue<task, vector<task>, std::less<task>> todo;
+	priority_queue<task, vector<task>, std::greater<task>> todo;
 	const int offset[] = {-frame->getWidth(), frame->getWidth(), -1, 1};
 
 	//Cover up almost everything, then improve the solution.
-	conceal_spatial_2(frame,false);
+	//conceal_spatial_2(frame,false);
 
 	//determine state && fill queue first time
 	for (int i = 0; i < numMB; i++){
@@ -1454,10 +1470,11 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 		int exists[] = { mb->getYPos() != 0, mb->getYPos() < frame->getHeight() - 1, mb->getXPos() != 0, mb->getXPos() < frame->getWidth() - 1 };
 
 		//try fastmotion & check error
-		if (conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, 2) > 30){
+		conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, 2);
+		/*if (conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, 2) > 30){
 			//error too big => use spatial
-			//f(mb, &exists[pos_LEFT], &exists[pos_RIGHT], &exists[pos_TOP], &exists[pos_BOT], mbstate, MBx, frame);
-		}
+			f(mb, &exists[pos_LEFT], &exists[pos_RIGHT], &exists[pos_TOP], &exists[pos_BOT], mbstate, MBx,getNeighbours(frame,MBx), frame);
+		}*/
 		mb->setConcealed();
 		mbstate[MBx] = CONCEALED;
 
@@ -1475,5 +1492,5 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 			todo.pop();
 		}
 	}
-	std::cout << "\tMissing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
+	std::cout << "\t[temporal 3] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
