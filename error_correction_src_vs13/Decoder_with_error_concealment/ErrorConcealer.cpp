@@ -1340,7 +1340,6 @@ float conceal_temporal_2_macroblock(Frame *frame, Frame* referenceFrame,Macroblo
 		for (int x = 0; x < 16; x += subsize){
 			//get motion vector => avg
 			MotionVector vec = getMV(frame, MBx, x, y, subsize);
-			//cout << MBx << "\\" << x << ":" << y << " | " << vec.x << " : " << vec.y << endl;
 			//fill
 			FillSubBMV(MB, frame, referenceFrame, vec, x, y, subsize);
 		}
@@ -1443,11 +1442,11 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 	//init
 	const int numMB = frame->getNumMB();
 	MBSTATE* mbstate = new MBSTATE[numMB];
-	priority_queue<task, vector<task>, std::greater<task>> todo;
-	const int offset[] = {-frame->getWidth(), frame->getWidth(), -1, 1};
+	priority_queue<task, vector<task>, std::less<task>> todo;
+	const int offset[] = { -frame->getWidth(), frame->getWidth(), -1, 1 };
 
 	//Cover up almost everything, then improve the solution.
-	//conceal_spatial_2(frame,false);
+	conceal_spatial_2(frame, false);
 
 	//determine state && fill queue first time
 	for (int i = 0; i < numMB; i++){
@@ -1470,11 +1469,11 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 		int exists[] = { mb->getYPos() != 0, mb->getYPos() < frame->getHeight() - 1, mb->getXPos() != 0, mb->getXPos() < frame->getWidth() - 1 };
 
 		//try fastmotion & check error
-		conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, 2);
-		/*if (conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, 2) > 30){
+		//conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, 2);
+		if (conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, 2) > 20){
 			//error too big => use spatial
 			f(mb, &exists[pos_LEFT], &exists[pos_RIGHT], &exists[pos_TOP], &exists[pos_BOT], mbstate, MBx,getNeighbours(frame,MBx), frame);
-		}*/
+		}
 		mb->setConcealed();
 		mbstate[MBx] = CONCEALED;
 
