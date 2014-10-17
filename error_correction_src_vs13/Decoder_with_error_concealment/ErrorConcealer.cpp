@@ -1448,12 +1448,19 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 	//Cover up almost everything, then improve the solution.
 	conceal_spatial_2(frame, false);
 
-	//determine state && fill queue first time
+	//determine state, fix motion && fill queue first time
 	for (int i = 0; i < numMB; i++){
-		if (frame->getMacroblock(i)->isMissing()){
-			mbstate[i] = MISSING;
-			task element(getNeighbours(frame, i), frame->getMacroblock(i));
-			todo.push(element);
+		Macroblock* mb = frame->getMacroblock(i);
+		if (mb->isMissing()){
+			if (conceal_temporal_2_macroblock(frame, referenceFrame, mb, i, 2) > 20){
+				mbstate[i] = MISSING;
+				task element(getNeighbours(frame, i), frame->getMacroblock(i));
+				todo.push(element);
+			}else{
+				mbstate[i] = CONCEALED;
+				mb->setConcealed();
+			}
+
 			missing++;
 		}else{
 			mbstate[i] = OK;
@@ -1467,16 +1474,10 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 
 		//what blocks exists?
 		int exists[] = { mb->getYPos() != 0, mb->getYPos() < frame->getHeight() - 1, mb->getXPos() != 0, mb->getXPos() < frame->getWidth() - 1 };
+		f(mb, &exists[pos_LEFT], &exists[pos_RIGHT], &exists[pos_TOP], &exists[pos_BOT], mbstate, MBx,getNeighbours(frame,MBx), frame);
 
-		//try fastmotion & check error
-		//conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, 2);
-		if (conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, 2) > 20){
-			//error too big => use spatial
-			f(mb, &exists[pos_LEFT], &exists[pos_RIGHT], &exists[pos_TOP], &exists[pos_BOT], mbstate, MBx,getNeighbours(frame,MBx), frame);
-		}
 		mb->setConcealed();
 		mbstate[MBx] = CONCEALED;
-
 		//add neighbours again to the queue
 		for (int i = 0; i < 4; i++){
 			if (exists[i]){
