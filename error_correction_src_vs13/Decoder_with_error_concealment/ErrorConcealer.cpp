@@ -1348,7 +1348,7 @@ float conceal_temporal_2_macroblock(Frame *frame, Frame* referenceFrame,Macroblo
 }
 //conceals all subblock by first using motion estimation. If the error is too high then spatial interpollation is used.
 void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame,const int size){
-
+	//Debug and evaluation
 	startChrono();
 	int missing = 0;
 	if (!frame->is_p_frame()){
@@ -1439,57 +1439,65 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 	startChrono();
 	int missing = 0;
 
-	//init
-	const int numMB = frame->getNumMB();
-	MBSTATE* mbstate = new MBSTATE[numMB];
-	priority_queue<task, vector<task>, std::less<task>> todo;
-	const int offset[] = { -frame->getWidth(), frame->getWidth(), -1, 1 };
+	if (!frame->is_p_frame()){
+		//if the frame is not Predictibely coded (we should have the whole frame), then we conceal using the spacial method instead.
+		// we can't use the temporal method because the reference frame is this frame.
+		conceal_spatial_2(frame, true);
+	}else{
+		//init
+		const int numMB = frame->getNumMB();
+		MBSTATE* mbstate = new MBSTATE[numMB];
+		priority_queue<task, vector<task>, std::less<task>> todo;
+		const int offset[] = { -frame->getWidth(), frame->getWidth(), -1, 1 };
 
-	//Cover up almost everything, then improve the solution.
-	conceal_spatial_2(frame, false);
+		//Cover up almost everything, then improve the solution.
+		conceal_spatial_2(frame, false);
 
-	//determine state, fix motion && fill queue first time
-	for (int i = 0; i < numMB; i++){
-		Macroblock* mb = frame->getMacroblock(i);
-		if (mb->isMissing()){
-			if (conceal_temporal_2_macroblock(frame, referenceFrame, mb, i, 2) > 20){
-				mbstate[i] = MISSING;
-				task element(getNeighbours(frame, i), frame->getMacroblock(i));
-				todo.push(element);
-			}else{
-				mbstate[i] = CONCEALED;
-				mb->setConcealed();
+		//determine state, fix motion && fill queue first time
+		for (int i = 0; i < numMB; i++){
+			Macroblock* mb = frame->getMacroblock(i);
+			if (mb->isMissing()){
+				if (conceal_temporal_2_macroblock(frame, referenceFrame, mb, i, 2) > 20){
+					mbstate[i] = MISSING;
+					task element(getNeighbours(frame, i), frame->getMacroblock(i));
+					todo.push(element);
+				}
+				else{
+					mbstate[i] = CONCEALED;
+					mb->setConcealed();
+				}
+
+				missing++;
 			}
-
-			missing++;
-		}else{
-			mbstate[i] = OK;
-		}
-	}
-
-	while (!todo.empty()){
-		Macroblock* mb = todo.top().second;
-		todo.pop();
-		const int MBx = mb->getMBNum();
-
-		//what blocks exists?
-		int exists[] = { mb->getYPos() != 0, mb->getYPos() < frame->getHeight() - 1, mb->getXPos() != 0, mb->getXPos() < frame->getWidth() - 1 };
-		f(mb, &exists[pos_LEFT], &exists[pos_RIGHT], &exists[pos_TOP], &exists[pos_BOT], mbstate, MBx,getNeighbours(frame,MBx), frame);
-
-		mb->setConcealed();
-		mbstate[MBx] = CONCEALED;
-		//add neighbours again to the queue
-		for (int i = 0; i < 4; i++){
-			if (exists[i]){
-				int item = MBx + offset[i];
-				task t(getNeighbours(frame, item), frame->getMacroblock(item));
-				todo.push(t);
+			else{
+				mbstate[i] = OK;
 			}
 		}
 
-		//cleanup - skip already concealed
-		while (!todo.empty() && mbstate[todo.top().second->getMBNum()] != MISSING){
+		while (!todo.empty()){
+			Macroblock* mb = todo.top().second;
 			todo.pop();
+			const int MBx = mb->getMBNum();
+
+			//what blocks exists?
+			int exists[] = { mb->getYPos() != 0, mb->getYPos() < frame->getHeight() - 1, mb->getXPos() != 0, mb->getXPos() < frame->getWidth() - 1 };
+			f(mb, &exists[pos_LEFT], &exists[pos_RIGHT], &exists[pos_TOP], &exists[pos_BOT], mbstate, MBx, getNeighbours(frame, MBx), frame);
+
+			mb->setConcealed();
+			mbstate[MBx] = CONCEALED;
+			//add neighbours again to the queue
+			for (int i = 0; i < 4; i++){
+				if (exists[i]){
+					int item = MBx + offset[i];
+					task t(getNeighbours(frame, item), frame->getMacroblock(item));
+					todo.push(t);
+				}
+			}
+
+			//cleanup - skip already concealed
+			while (!todo.empty() && mbstate[todo.top().second->getMBNum()] != MISSING){
+				todo.pop();
+			}
 		}
 	}
 	std::cout << "\t[temporal 3] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
