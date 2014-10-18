@@ -1461,15 +1461,13 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 					mbstate[i] = MISSING;
 					task element(getNeighbours(frame, i), frame->getMacroblock(i));
 					todo.push(element);
-				}
-				else{
+				}else{
 					mbstate[i] = CONCEALED;
 					mb->setConcealed();
 				}
 
 				missing++;
-			}
-			else{
+			}else{
 				mbstate[i] = OK;
 			}
 		}
@@ -1487,8 +1485,8 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 			mbstate[MBx] = CONCEALED;
 			//add neighbours again to the queue
 			for (int i = 0; i < 4; i++){
-				if (exists[i]){
-					int item = MBx + offset[i];
+				int item = MBx + offset[i];
+				if (exists[i] && frame->getMacroblock(item)->isMissing()){
 					task t(getNeighbours(frame, item), frame->getMacroblock(item));
 					todo.push(t);
 				}
