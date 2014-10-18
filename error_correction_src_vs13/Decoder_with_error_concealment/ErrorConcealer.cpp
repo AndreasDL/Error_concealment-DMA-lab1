@@ -1453,7 +1453,7 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 		//Cover up almost everything, then improve the solution.
 		conceal_spatial_2(frame, false);
 
-		//determine state, fix motion && fill queue first time
+		//determine state, fix motion && fill queue first time (we can always do motion since it only depends on the previous frame; all macroblocks, concealed or not, will be there
 		for (int i = 0; i < numMB; i++){
 			Macroblock* mb = frame->getMacroblock(i);
 			if (mb->isMissing()){
