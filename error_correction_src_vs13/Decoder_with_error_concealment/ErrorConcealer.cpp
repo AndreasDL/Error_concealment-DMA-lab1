@@ -1484,6 +1484,7 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 			mb->setConcealed();
 			mbstate[MBx] = CONCEALED;
 			//add neighbours again to the queue
+			//(so we have the values with updated neighbours, since they will have more neighbours, they will be in front of previous tasks)
 			for (int i = 0; i < 4; i++){
 				int item = MBx + offset[i];
 				if (exists[i] && frame->getMacroblock(item)->isMissing()){
@@ -1492,7 +1493,8 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 				}
 			}
 
-			//cleanup - skip already concealed
+			//cleanup - skip already concealed 
+			//(because we add blocks multiple times , it could be that they have already been concealed, we need to clean these blocks out of the queue untill we have a new missing block)
 			while (!todo.empty() && mbstate[todo.top().second->getMBNum()] != MISSING){
 				todo.pop();
 			}
