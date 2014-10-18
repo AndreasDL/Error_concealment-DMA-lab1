@@ -1346,6 +1346,39 @@ float conceal_temporal_2_macroblock(Frame *frame, Frame* referenceFrame,Macroblo
 	}
 	return CheckMB(MB, frame, MBx);
 }
+//same as conceal_temporal_2_macroblock but now with dynamic block sizes
+float conceal_temporal_2_dynamic(Frame* frame, Frame *referenceFrame, const int MBx){
+	Macroblock *mb = frame->getMacroblock(MBx);
+	int sizes[4] = { 16, 8, 4, 2 };
+
+	//preform 16x16
+	float besterr = conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, sizes[0]);
+	int bestsize = 0;
+
+	//try other ones
+	for (int i = 1; i < 4; i++){
+		float err = conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, sizes[i]);
+		if (err < besterr){
+			besterr = err;
+			bestsize = i;
+		}
+	}
+
+	//use best size
+	return conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, sizes[bestsize]);
+
+	//try 8x8
+	//MotionVector mv = getMV(frame, MBx, 0, 0, subsize);
+
+	//tr 
+	//try 4x4
+	//tr
+	//try 2x2
+	//tl 
+	//dr
+	//dl
+}
+
 //conceals all subblock by first using motion estimation. If the error is too high then spatial interpollation is used.
 void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame,const int size){
 	//Debug and evaluation
@@ -1368,8 +1401,9 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame,cons
 			Macroblock *MB = frame->getMacroblock(MBx);
 			if (MB->isMissing()){
 				missing++;
-				float err = conceal_temporal_2_macroblock(frame, referenceFrame, MB, MBx, subsize);
-				if (err > 20){ //Error too big => use spatial
+				//float err = conceal_temporal_2_macroblock(frame, referenceFrame, MB, MBx, subsize);
+				float err = conceal_temporal_2_dynamic(frame, referenceFrame, MBx);
+				if (err > 25){ //Error too big => use spatial
 					todo.push(MBx);
 					MBstate[MBx] = MISSING;
 				}else{
@@ -1407,29 +1441,6 @@ float conceal_temporal_2_subblock(Frame * frame, Frame * referenceFrame, Macrobl
 		}
 	}
 	return 0;
-}
-//same as conceal_temporal_2 but now with dynamic block sizes
-void ErrorConcealer::conceal_temporal_2_dynamic(Frame* frame, Frame *referenceFrame, const int MBx){
-	Macroblock *mb = frame->getMacroblock(MBx);
-	//preform 16x16
-	float besterr = conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, 16);
-	
-	//try 8x8
-	//MotionVector mv = getMV(frame, MBx, 0, 0, subsize);
-
-	//tr 
-		//try 4x4
-			//tr
-				//try 2x2
-
-	//tl 
-	//dr
-	//dl
-
-	
-
-
-	//*/
 }
 
 //temporal 3
