@@ -22,35 +22,36 @@ ErrorConcealer::~ErrorConcealer(void){
 }
 void ErrorConcealer::concealErrors(Frame *frame, Frame *referenceFrame){
 	switch(conceal_method){
-		case 0:
+		case 0://2A
 			conceal_spatial_1(frame);
 			break;
-		case 1:
+		case 1://2B
 			conceal_spatial_2(frame,true);
 			break;
-		case 2:
+		case 2://2C
 			conceal_spatial_3(frame);
 			break;
-		case 3:
+		case 3://3A
 			conceal_temporal_1(frame, referenceFrame);
 			break;
-		case 4:
+		case 4://3B
 			conceal_temporal_2(frame, referenceFrame, 1);
 			break;
-		case 5:
+		case 5://3B
 			conceal_temporal_2(frame, referenceFrame, 2);
 			break;
-		case 6:
+		case 6://3B
 			conceal_temporal_2(frame, referenceFrame, 3);
 			break;
-		case 7:
+		case 7://3B
 			conceal_temporal_2(frame, referenceFrame, 4);
 			break;
-		case 8:
+		case 8://3C
 			conceal_temporal_3(frame, referenceFrame);
 			break;
-		case 9:
-			// To be completed. Add explanatory notes in English.
+		case 9://3D
+			conceal_temporal_2_dynamic(frame, referenceFrame);
+			break;
 		default:
 			printf("\nWARNING: NO ERROR CONCEALMENT PERFORMED! (conceal_method %d unknown)\n\n",conceal_method);
 	}
@@ -1333,6 +1334,14 @@ inline MotionVector getMV(Frame* frame, const int MBx, const int sub_x, const in
 
 	return (denominatorX == 0 && denominatorY == 0 ? notthere : mv);
 }
+//covers only 1 macroblock at position _x,_y in the macroblock with size= subsize
+inline float conceal_temporal_2_subblock(Frame * frame, Frame * referenceFrame, Macroblock* mb, const int subsize, const int _x, const int _y){
+	const int MBx = mb->getMBNum();
+	MotionVector vec = getMV(frame, MBx, _x, _y, subsize);
+	//fill
+	FillSubBMV(mb, frame, referenceFrame, vec, _x, _y, subsize);
+	return CheckMB(mb,frame,MBx);
+}
 //conceals a macroblock by using motion estimation from 3B and returns the error. Does not set this block to concealed
 float conceal_temporal_2_macroblock(Frame *frame, Frame* referenceFrame,Macroblock * MB, const int MBx, const int subsize){
 	//foreach subblock
@@ -1347,46 +1356,50 @@ float conceal_temporal_2_macroblock(Frame *frame, Frame* referenceFrame,Macroblo
 	return CheckMB(MB, frame, MBx);
 }
 //same as conceal_temporal_2_macroblock but now with dynamic block sizes
-float conceal_temporal_2_dynamic(Frame* frame, Frame *referenceFrame, const int MBx){
+float conceal_temporal_2_macroblock_dynamic(Frame* frame, Frame *referenceFrame, const int MBx){
 	Macroblock *mb = frame->getMacroblock(MBx);
 	int sizes[4] = { 16, 8, 4, 2 };
 
 	//preform 16x16
 	float besterr = conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, sizes[0]);
-	int bestsize = 0;
 
-	//try other ones
+	//for all sizes 
 	for (int i = 1; i < 4; i++){
-		float err = conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, sizes[i]);
-		if (err < besterr){
-			besterr = err;
-			bestsize = i;
+		//cout << "size: " << sizes[i] << endl;
+		//all sizes have 16/size /* 16/size blocks to replace
+		for (int y = 0; y < 16; y+= sizes[i]){
+			for (int x = 0; x < 16; x += sizes[i]){
+				//cout << "block " << x << " " << y << " go!" << endl;
+				Macroblock temp(*mb);//temp block to fill and then keep or throw out
+				float err = conceal_temporal_2_subblock(frame, referenceFrame, &temp, sizes[i], x, y);
+				if (err < besterr){ //better? change mb with temp
+					//cout << "better found! swapping" << endl;
+					//copy?
+					for (int j = 0; j < 16; j++){
+						for (int i = 0; i < 16; i++){
+							mb->luma[j][i] = temp.luma[j][i];
+							mb->cb[j/2][i/2] = temp.cb[j/2][i/2];
+							mb->cr[j/2][i/2] = temp.cr[j/2][i/2];
+						}
+					}
+					besterr = err;
+				}//else => don't change so don't use it.
+			}
 		}
 	}
 
 	//use best size
-	return conceal_temporal_2_macroblock(frame, referenceFrame, mb, MBx, sizes[bestsize]);
-
-	//try 8x8
-	//MotionVector mv = getMV(frame, MBx, 0, 0, subsize);
-
-	//tr 
-	//try 4x4
-	//tr
-	//try 2x2
-	//tl 
-	//dr
-	//dl
+	return besterr;
 }
 
 //conceals all subblock by first using motion estimation. If the error is too high then spatial interpollation is used.
-void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame,const int size){
+void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, const int size){
 	//Debug and evaluation
 	startChrono();
 	int missing = 0;
 	if (!frame->is_p_frame()){
 		//if the frame is not Predictibely coded (we should have the whole frame), then we conceal using the spacial method instead.
-		conceal_spatial_2(frame,true);
+		conceal_spatial_2(frame, true);
 	}else{
 		int numMB = frame->getNumMB();
 		//calc subsize	
@@ -1402,14 +1415,15 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame,cons
 			if (MB->isMissing()){
 				missing++;
 				//float err = conceal_temporal_2_macroblock(frame, referenceFrame, MB, MBx, subsize);
-				float err = conceal_temporal_2_dynamic(frame, referenceFrame, MBx);
+				float err = conceal_temporal_2_macroblock_dynamic(frame, referenceFrame, MBx);
 				if (err > 25){ //Error too big => use spatial
 					todo.push(MBx);
 					MBstate[MBx] = MISSING;
-				}else{
+				}
+				else{
 					MB->setConcealed();
 					MBstate[MBx] = CONCEALED;
-				}	
+				}
 			}
 			MBstate[MBx] = OK;
 		}
@@ -1423,7 +1437,7 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame,cons
 			int exists_bot = block->getYPos() < frame->getHeight() - 1 ? 1 : 0;
 			int exists_left = block->getXPos() != 0 ? 1 : 0;
 			int exists_right = block->getXPos() < frame->getWidth() - 1 ? 1 : 0;
-			f(block, &exists_left, &exists_right, &exists_top, &exists_bot, MBstate, num,getNeighbours(frame,num), frame);
+			f(block, &exists_left, &exists_right, &exists_top, &exists_bot, MBstate, num, getNeighbours(frame, num), frame);
 			block->setConcealed();
 			MBstate[num] = CONCEALED;
 		}
@@ -1431,20 +1445,54 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame,cons
 	}
 	std::cout << "\t[temporal 2 (" << size << ")] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
+void ErrorConcealer::conceal_temporal_2_dynamic(Frame *frame, Frame *referenceFrame){
+	//Debug and evaluation
+	startChrono();
+	int missing = 0;
+	if (!frame->is_p_frame()){
+		//if the frame is not Predictibely coded (we should have the whole frame), then we conceal using the spacial method instead.
+		conceal_spatial_2(frame, true);
+	}else{
+		int numMB = frame->getNumMB();
+		queue<int> todo;//keep track of blocks with big errors
+		MBSTATE* MBstate = new MBSTATE[numMB];
 
-float conceal_temporal_2_subblock(Frame * frame, Frame * referenceFrame, Macroblock* mb, const int subsize, const int _x, const int _y){
-	//TODO
-	//recursive
-	for (int y = 0; y < 2; y++){
-		for (int x = 0; x < 2; x++){
-
+		for (int MBx = 0; MBx < numMB; ++MBx){
+			Macroblock *MB = frame->getMacroblock(MBx);
+			if (MB->isMissing()){
+				missing++;
+				float err = conceal_temporal_2_macroblock_dynamic(frame, referenceFrame, MBx);
+				if (err > 25){ //Error too big => use spatial
+					todo.push(MBx);
+					MBstate[MBx] = MISSING;
+				}else{
+					MB->setConcealed();
+					MBstate[MBx] = CONCEALED;
+				}
+			}
+			MBstate[MBx] = OK;
 		}
+
+		//fix blocks with big errors
+		while (!todo.empty()){
+			int num = todo.front();
+			todo.pop();
+			Macroblock* block = frame->getMacroblock(num);
+			int exists_top = block->getYPos() != 0 ? 1 : 0;
+			int exists_bot = block->getYPos() < frame->getHeight() - 1 ? 1 : 0;
+			int exists_left = block->getXPos() != 0 ? 1 : 0;
+			int exists_right = block->getXPos() < frame->getWidth() - 1 ? 1 : 0;
+			f(block, &exists_left, &exists_right, &exists_top, &exists_bot, MBstate, num, getNeighbours(frame, num), frame);
+			block->setConcealed();
+			MBstate[num] = CONCEALED;
+		}
+		delete[] MBstate;
 	}
-	return 0;
+	std::cout << "\t[temporal 2 ( dynamic)] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
 
 //temporal 3
-//same as temporal 2 but also possible when multiple adjecent blocks are missing
+//same as temporal 2 but optimized to tackle multiple adjecent blocks are missing
 void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 	//debug & evaluation
 	startChrono();
