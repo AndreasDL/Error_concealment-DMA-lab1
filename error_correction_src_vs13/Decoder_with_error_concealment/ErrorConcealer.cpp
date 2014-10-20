@@ -725,7 +725,7 @@ void f2(Macroblock* MB,
 							p1_luma = MB_t->luma[15][xcoord];
 						}
 						else if (*exist_l == 1){		// Otherwise conceal spatially without edge data (conceal_spatial_2)
-							useConceal2 = true;
+							//useConceal2 = true;
 							p1_luma = MB_l->luma[0][15];
 						}
 						else {							// Otherwise conceal spatially without edge data (conceal_spatial_2)
@@ -743,7 +743,7 @@ void f2(Macroblock* MB,
 							p1_luma = MB_l->luma[ycoord][15];
 						}
 						else if (*exist_t == 1){		// Otherwise conceal spatially without edge data (conceal_spatial_2)
-							useConceal2 = true;
+							//useConceal2 = true;
 							p1_luma = MB_t->luma[15][0];
 						}
 						else {							// Otherwise conceal spatially without edge data (conceal_spatial_2)
@@ -770,7 +770,7 @@ void f2(Macroblock* MB,
 							p1_luma = MB_b->luma[0][xcoord];
 						}
 						else if (*exist_l == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
-							useConceal2 = true;
+							//useConceal2 = true;
 							p1_luma = MB_l->luma[15][15];		// When bottom doesn't exist, we take the closest edge pixel that might be available: p(15,15) of the left MB.
 						}
 						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)
@@ -789,7 +789,7 @@ void f2(Macroblock* MB,
 							p1_luma = MB_l->luma[ycoord][15];
 						}
 						else if (*exist_b == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
-							useConceal2 = true;
+							//useConceal2 = true;
 							p1_luma = MB_b->luma[0][0];
 						}
 						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)
@@ -823,7 +823,7 @@ void f2(Macroblock* MB,
 							p2_luma = MB_b->luma[0][xcoord];
 						}
 						else if (*exist_r == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
-							useConceal2 = true;	
+							//useConceal2 = true;	
 							p2_luma = MB_r->luma[15][0];
 						}
 						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)
@@ -840,7 +840,7 @@ void f2(Macroblock* MB,
 							p2_luma = MB_r->luma[ycoord][0];
 						}
 						else if (*exist_l == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
-							useConceal2 = true;
+							//useConceal2 = true;
 							p2_luma = MB_l->luma[0][15];
 						}
 						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)
@@ -869,7 +869,7 @@ void f2(Macroblock* MB,
 							p2_luma = MB_t->luma[15][xcoord];
 						}
 						else if (*exist_r == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
-							useConceal2 = true;
+							//useConceal2 = true;
 							p2_luma = MB_r->luma[0][0];
 						}
 						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)
@@ -886,7 +886,7 @@ void f2(Macroblock* MB,
 							p2_luma = MB_r->luma[ycoord][0];
 						}
 						else if (*exist_t == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
-							useConceal2 = true;
+							//useConceal2 = true;
 							p2_luma = MB_t->luma[15][15];
 						}
 						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)						
@@ -963,7 +963,7 @@ void f2(Macroblock* MB,
 							p1_cr = MB_t->cr[7][xcoord];
 						}
 						else if (*exist_l == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
-							useConceal2 = true;
+							//useConceal2 = true;
 							p1_cb = MB_l->cb[0][7];
 							p1_cr = MB_l->cr[0][7];
 						}
@@ -986,7 +986,7 @@ void f2(Macroblock* MB,
 						}
 						else if (*exist_t == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
 							useConceal2 = true;
-							p1_cb = MB_t->cb[7][0];
+							//p1_cb = MB_t->cb[7][0];
 							p1_cr = MB_t->cr[7][0];
 						}
 						else {									// Otherwise conceal spatially without edge data (conceal_spatial_2)
@@ -1015,7 +1015,7 @@ void f2(Macroblock* MB,
 							p1_cr = MB_b->cr[0][xcoord];
 						}
 						else if (*exist_l == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
-							useConceal2 = true;
+							//useConceal2 = true;
 							p1_cb = MB_l->cb[7][7];					// When bottom doesn't exist, we take the closest edge pixel that will might be available: p(7,7) of the left MB.
 							p1_cr = MB_l->cr[7][7];
 						}
@@ -1035,7 +1035,7 @@ void f2(Macroblock* MB,
 							p1_cr = MB_l->cr[ycoord][7];
 						}
 						else if (*exist_b == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)
-							useConceal2 = true;
+							//useConceal2 = true;
 							p1_cb = MB_b->cb[0][0];
 							p1_cr = MB_b->cr[0][0];
 						}
@@ -1070,7 +1070,7 @@ void f2(Macroblock* MB,
 							p2_cr = MB_b->cr[0][xcoord];
 						}
 						else if (*exist_r == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)	
-							useConceal2 = true;
+							//useConceal2 = true;
 							p2_cb = MB_r->cb[7][0];
 							p2_cr = MB_r->cr[7][0];
 						}
@@ -1090,7 +1090,7 @@ void f2(Macroblock* MB,
 							p2_cr = MB_r->cr[ycoord][0];
 						}
 						else if (*exist_l == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)	
-							useConceal2 = true;
+							//useConceal2 = true;
 							p2_cb = MB_l->cb[0][7];
 							p2_cr = MB_l->cr[0][7];
 						}
@@ -1121,7 +1121,7 @@ void f2(Macroblock* MB,
 							p2_cr = MB_t->cr[7][xcoord];
 						}
 						else if (*exist_r == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)	
-							useConceal2 = true;
+							//useConceal2 = true;
 							p2_cb = MB_r->cb[0][0];
 							p2_cr = MB_r->cr[0][0];
 						}	
@@ -1141,7 +1141,7 @@ void f2(Macroblock* MB,
 							p2_cr = MB_r->cr[ycoord][0];
 						}
 						else if (*exist_t == 1){				// Otherwise conceal spatially without edge data (conceal_spatial_2)	
-							useConceal2 = true;
+							//useConceal2 = true;
 							p2_cb = MB_t->cb[7][7];
 							p2_cr = MB_t->cr[7][7];
 						}
@@ -1554,7 +1554,7 @@ void ErrorConcealer::conceal_spatial_3(Frame *frame)
 			////		
 			//// p1 = p(j1,k1), p2 = p(j2,k2)
 
-			double slope_rel = slope*(-1.0)*(-1.0);
+			double slope_rel = slope;
 
 			////////////////////////////////////////////
 			// Interpolation of luma (Y) value
