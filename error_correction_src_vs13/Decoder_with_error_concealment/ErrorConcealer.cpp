@@ -530,12 +530,7 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame,const bool setConcealed){
 
 
 // The edge detection function from exercise 2.C is situated in f2. This will be called from within conceal_spatial_3
-
-void f2(Macroblock* MB,
-	int* exist_l, int* exist_r, int* exist_t, int* exist_b,
-	MBSTATE* MBstate,
-	int MBx,
-	Frame *frame){
+void f2(Macroblock* MB,	int* exist_l, int* exist_r, int* exist_t, int* exist_b,	MBSTATE* MBstate,const int MBx,Frame *frame){
 
 	// This method is based upon the paper 'XXX YYY ZZZ' by xxx, yyy, zzz (link).
 
@@ -1254,9 +1249,12 @@ void f2(Macroblock* MB,
 
 	delete MBEmpty;
 }
+//Use edge detection
+void ErrorConcealer::conceal_spatial_3(Frame *frame){
+	//debug & evaluation
+	startChrono();
+	int missing = 0;
 
-void ErrorConcealer::conceal_spatial_3(Frame *frame)
-{
 	// The body of this function is the same as in conceal_spatial_2 (to support the complex pattern), but the the function now calls f2, the concealment function based on edge data.
 
 	int numMB = frame->getNumMB();
@@ -1274,6 +1272,7 @@ void ErrorConcealer::conceal_spatial_3(Frame *frame)
 		if (frame->getMacroblock(MBx)->isMissing()){
 			MBstate[MBx] = MISSING;
 			++nrOfMBsMissing;
+			missing++;
 		}
 		else{
 			MBstate[MBx] = OK;
@@ -1376,6 +1375,7 @@ void ErrorConcealer::conceal_spatial_3(Frame *frame)
 			}
 		}
 	}
+	std::cout << "\t[Spatial 3] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
 
 //assume no motion & use previous block
@@ -1678,7 +1678,7 @@ void ErrorConcealer::conceal_temporal_2_dynamic(Frame *frame, Frame *referenceFr
 			if (MB->isMissing()){
 				missing++;
 				float err = conceal_temporal_2_macroblock_dynamic(frame, referenceFrame, MBx);
-				if (err > 25){ //Error too big => use spatial
+				if (err > 30){ //Error too big => use spatial
 					todo.push(MBx);
 					MBstate[MBx] = MISSING;
 				}else{
