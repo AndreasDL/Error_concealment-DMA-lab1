@@ -1254,11 +1254,11 @@ inline void FillSubBMV(Macroblock *MB, Frame *frame, Frame *referenceFrame, cons
 	}
 }
 //how much does the edge of MB differ from usedMB ?
-inline float CheckMB(Macroblock *MB, Frame *frame,const int MBx){
+inline float CheckMB(Macroblock *MB, Frame *frame, const int MBx){
 	int verschil = 0;
 	int aantalvglnpixels = 0;
 	int MBxpos = MB->getXPos() * 16;
-	int MBypos = MB->getYPos() * 16;		
+	int MBypos = MB->getYPos() * 16;
 
 	for (int t = 0; t < 16; ++t){
 		if (MB->getYPos() != 0){
@@ -1279,9 +1279,38 @@ inline float CheckMB(Macroblock *MB, Frame *frame,const int MBx){
 		}
 	}
 
-	float errorperpixel = float(verschil)/aantalvglnpixels;
+	float errorperpixel = float(verschil) / aantalvglnpixels;
 	return errorperpixel;
 }
+inline float CheckSubB(Macroblock *MB, Frame *frame, const int MBx, const int _x, const int _y, const int subsize){
+	int verschil = 0;
+	int aantalvglnpixels = 0;
+	int MBxpos = MB->getXPos() * 16 + _x;
+	int MBypos = MB->getYPos() * 16 + _y;
+
+	for (int t = 0; t < subsize; ++t){
+		if (MB->getYPos() != 0){
+			verschil += abs(MB->luma[0][_x + t] - frame->getMacroblock(MBx - frame->getWidth())->luma[15][_x + t]);
+			++aantalvglnpixels;
+		}
+		if (MB->getYPos() != (frame->getHeight() - 1)){
+			verschil += abs(MB->luma[15][_x + t] - frame->getMacroblock(MBx + frame->getWidth())->luma[0][_x + t]);
+			++aantalvglnpixels;
+		}
+		if (MB->getXPos() != 0){
+			verschil += abs(MB->luma[_y + t][0] - frame->getMacroblock(MBx - 1)->luma[_y + t][15]);
+			++aantalvglnpixels;
+		}
+		if (MB->getXPos() != (frame->getWidth() - 1)){
+			verschil += abs(MB->luma[_y + t][15] - frame->getMacroblock(MBx + 1)->luma[_y + t][0]);
+			++aantalvglnpixels;
+		}
+	}
+
+	float errorperpixel = float(verschil) / aantalvglnpixels;
+	return errorperpixel;
+}
+
 //get motion vector for a subblock (_x;_y) in block MBx.
 inline MotionVector getMV(Frame* frame, const int MBx, const int sub_x, const int sub_y, const int subsize){
 	MotionVector mv;
@@ -1340,19 +1369,28 @@ inline float conceal_temporal_2_subblock(Frame * frame, Frame * referenceFrame, 
 	MotionVector vec = getMV(frame, MBx, _x, _y, subsize);
 	//fill
 	FillSubBMV(mb, frame, referenceFrame, vec, _x, _y, subsize);
-	return CheckMB(mb,frame,MBx);
+	return CheckSubB(mb,frame,MBx,_x,_y,subsize);
 }
 //conceals a macroblock by using motion estimation from 3B and returns the error. Does not set this block to concealed
 float conceal_temporal_2_macroblock(Frame *frame, Frame* referenceFrame,Macroblock * MB, const int MBx, const int subsize){
 	//foreach subblock
+	MotionVector tohold;
+	tohold.x = 0;
+	tohold.y = 0;
+	int aant = 0;
 	for (int y = 0; y < 16; y += subsize){
 		for (int x = 0; x < 16; x += subsize){
 			//get motion vector => avg
 			MotionVector vec = getMV(frame, MBx, x, y, subsize);
+			tohold.x += vec.x;
+			tohold.y += vec.y;
+			aant++;
 			//fill
 			FillSubBMV(MB, frame, referenceFrame, vec, x, y, subsize);
 		}
 	}
+	MB->mv.x = tohold.x / aant;
+	MB->mv.y = tohold.y / aant;
 	return CheckMB(MB, frame, MBx);
 }
 //same as conceal_temporal_2_macroblock but now with dynamic block sizes
@@ -1495,12 +1533,12 @@ void ErrorConcealer::conceal_temporal_2_dynamic(Frame *frame, Frame *referenceFr
 //same as temporal 2 but optimized to tackle multiple adjecent blocks are missing
 void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 	//debug & evaluation
-	startChrono();
 	int missing = 0;
 
 	if (!frame->is_p_frame()){
 		//if the frame is not Predictibely coded (we should have the whole frame), then we conceal using the spacial method instead.
 		// we can't use the temporal method because the reference frame is this frame.
+		startChrono();
 		conceal_spatial_2(frame, true);
 	}else{
 		//init
@@ -1511,12 +1549,13 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 
 		//Cover up almost everything, then improve the solution.
 		conceal_spatial_2(frame, false);
-
+		startChrono();
 		//determine state, fix motion && fill queue first time (we can always do motion since it only depends on the previous frame; all macroblocks, concealed or not, will be there
 		for (int i = 0; i < numMB; i++){
 			Macroblock* mb = frame->getMacroblock(i);
 			if (mb->isMissing()){
-				if (conceal_temporal_2_macroblock(frame, referenceFrame, mb, i, 2) > 20){
+				int err = conceal_temporal_2_macroblock_dynamic(frame, referenceFrame,i);
+				if (err > 20){
 					mbstate[i] = MISSING;
 					task element(getNeighbours(frame, i), frame->getMacroblock(i));
 					todo.push(element);
@@ -1539,6 +1578,7 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 			//what blocks exists?
 			int exists[] = {1,1,1,1};//{ mb->getYPos() != 0, mb->getYPos() < frame->getHeight() - 1, mb->getXPos() != 0, mb->getXPos() < frame->getWidth() - 1 };
 			f(mb, &exists[pos_LEFT], &exists[pos_RIGHT], &exists[pos_TOP], &exists[pos_BOT], mbstate, MBx, getNeighbours(frame, MBx), frame);
+			int errnew = CheckMB(mb, frame, MBx);
 
 			mb->setConcealed();
 			mbstate[MBx] = CONCEALED;
@@ -1554,7 +1594,7 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 
 			//cleanup - skip already concealed 
 			//(because we add blocks multiple times , it could be that they have already been concealed, we need to clean these blocks out of the queue untill we have a new missing block)
-			while (!todo.empty() && mbstate[todo.top().second->getMBNum()] != MISSING){
+			while (!todo.empty() && !todo.top().second->isMissing()){
 				todo.pop();
 			}
 		}
