@@ -1414,13 +1414,7 @@ void ErrorConcealer::conceal_temporal_1(Frame *frame, Frame *referenceFrame){
 			missing++;
 			Macroblock *MB = frame->getMacroblock(MBx);
 			Macroblock *MBref = referenceFrame->getMacroblock(MBx);
-			for (int i = 0; i < 16; ++i)	{
-				for (int j = 0; j < 16; ++j)		{
-					MB->luma[i][j] = MBref->luma[i][j];
-					MB->cb[i/2][j/2] = MBref->cb[i/2][j/2];
-					MB->cr[i/2][j/2] = MBref->cr[i/2][j/2];
-				}
-			}
+			copyValues(MBref, MB);
 		}
 	}
 	std::cout << "\t[temporal 1] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
@@ -1615,13 +1609,7 @@ inline float conceal_temporal_2_macroblock_dynamic(Frame* frame, Frame *referenc
 				if (err < besterr){ //better? change mb with temp
 					//cout << "better found! swapping" << endl;
 					//copy?
-					for (int j = 0; j < 16; j++){
-						for (int i = 0; i < 16; i++){
-							mb->luma[j][i] = temp.luma[j][i];
-							mb->cb[j/2][i/2] = temp.cb[j/2][i/2];
-							mb->cr[j/2][i/2] = temp.cr[j/2][i/2];
-						}
-					}
+					copyValues(&temp, mb);
 					besterr = err;
 				}//else => don't change so don't use it.
 			}
@@ -1631,7 +1619,6 @@ inline float conceal_temporal_2_macroblock_dynamic(Frame* frame, Frame *referenc
 	//use best size
 	return besterr;
 }
-
 //conceals all subblock by first using motion estimation. If the error is too high then spatial interpollation is used.
 //This method will cover the whole frame by using motion estimation (interpolation of the motion vectors)
 //using subblocks of size = 2^size; (2,4,8,16)
@@ -1656,13 +1643,11 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, con
 			Macroblock *MB = frame->getMacroblock(MBx);
 			if (MB->isMissing()){
 				missing++;
-				//float err = conceal_temporal_2_macroblock(frame, referenceFrame, MB, MBx, subsize);
-				float err = conceal_temporal_2_macroblock_dynamic(frame, referenceFrame, MBx);
+				float err = conceal_temporal_2_macroblock(frame, referenceFrame, MB, MBx, subsize);
 				if (err > 25){ //Error too big => use spatial
 					todo.push(MBx);
 					MBstate[MBx] = MISSING;
-				}
-				else{
+				}else{
 					MB->setConcealed();
 					MBstate[MBx] = CONCEALED;
 				}
