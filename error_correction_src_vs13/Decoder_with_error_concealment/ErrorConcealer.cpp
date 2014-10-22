@@ -549,8 +549,9 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame,const bool setConcealed){
 // The edge detection function from exercise 2.C is situated in f2. This will be called from within conceal_spatial_3
 inline void f2(Macroblock* MB,	int* exist_l, int* exist_r, int* exist_t, int* exist_b,	MBSTATE* MBstate,const int MBx,Frame *frame){
 
-	//This method is based upon the paper 'Flexible Error Concealment for H.264 Based on Directional Interpolation'
-	//Found at: http ://ieeexplore.ieee.org/xpl/login.jsp?tp=&arnumber=1549592&url=http%3A%2F%2Fieeexplore.ieee.org%2Fxpls%2Fabs_all.jsp%3Farnumber%3D1549592
+	// This method is based on the paper 'Flexible Error Concealment for H.264 Based on Directional Interpolation' by O. Nemethove, A. Al-Moghrabi and M. Rupp. 
+	//Found at: http://ieeexplore.ieee.org/xpl/login.jsp?tp=&arnumber=1549592&url=http%3A%2F%2Fieeexplore.ieee.org%2Fxpls%2Fabs_all.jsp%3Farnumber%3D1549592
+
 
 	// The used kernels are 2 3x3 Sobel-kernels (1 horizontal and 1 vertical).
 	double kernel_x[3][3] = { { -1, 0, 1 }, { -2, 0, 2 }, { -1, 0, 1 } };
