@@ -1660,10 +1660,10 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, con
 			int num = todo.front();
 			todo.pop();
 			Macroblock* block = frame->getMacroblock(num);
-			int exists_top = block->getYPos() != 0 ? 1 : 0;
-			int exists_bot = block->getYPos() < frame->getHeight() - 1 ? 1 : 0;
-			int exists_left = block->getXPos() != 0 ? 1 : 0;
-			int exists_right = block->getXPos() < frame->getWidth() - 1 ? 1 : 0;
+			int exists_top = 1;// = block->getYPos() != 0 ? 1 : 0;
+			int exists_bot = 1;// = block->getYPos() < frame->getHeight() - 1 ? 1 : 0;
+			int exists_left = 1;// block->getXPos() != 0 ? 1 : 0;
+			int exists_right = 1; // block->getXPos() < frame->getWidth() - 1 ? 1 : 0;
 			f(block, &exists_left, &exists_right, &exists_top, &exists_bot, MBstate, num, getNeighbours(frame, num), frame);
 			block->setConcealed();
 			MBstate[num] = CONCEALED;
