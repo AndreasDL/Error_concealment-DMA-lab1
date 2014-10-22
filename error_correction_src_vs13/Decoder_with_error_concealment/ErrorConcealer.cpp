@@ -1469,6 +1469,7 @@ inline float CheckMB(Macroblock *MB, Frame *frame, const int MBx){
 	float errorperpixel = float(verschil) / aantalvglnpixels;
 	return errorperpixel;
 }
+//how much does the edge of a subblock differ from usedMB ?
 inline float CheckSubB(Macroblock *MB, Frame *frame, const int MBx, const int _x, const int _y, const int subsize){
 	int verschil = 0;
 	int aantalvglnpixels = 0;
@@ -1670,6 +1671,8 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, con
 	}
 	std::cout << "\t[temporal 2 (" << size << ")] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
+//uses motion on the whole macroblock and then tries to improve the solution by moving part of the blocks 
+//(e.g. a block might be covered by a movement of subsize 16, parts 8 en parts in size 2)
 void ErrorConcealer::conceal_temporal_2_dynamic(Frame *frame, Frame *referenceFrame){
 	//debug & evaluation
 	int missing = 0;
