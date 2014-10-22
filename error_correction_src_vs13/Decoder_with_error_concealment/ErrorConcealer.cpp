@@ -543,6 +543,8 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame,const bool setConcealed){
 			}
 		}
 	}
+
+	delete[] MBstate;
 	std::cout << "\t[Spatial 2] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
 
@@ -1265,6 +1267,8 @@ inline void f2(Macroblock* MB,	int* exist_l, int* exist_r, int* exist_t, int* ex
 		f(MB, exist_l, exist_r, exist_t, exist_b, MBstate, MBx, 0, frame);
 	}
 
+	delete[] gradients;
+	delete[] slopes;
 	delete MBEmpty;
 }
 //Uses edge detection to conceal macroblocks
@@ -1393,6 +1397,7 @@ void ErrorConcealer::conceal_spatial_3(Frame *frame){
 			}
 		}
 	}
+	delete[] MBstate;
 	std::cout << "\t[Spatial 3] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
 
