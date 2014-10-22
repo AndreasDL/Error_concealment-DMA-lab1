@@ -1619,6 +1619,8 @@ float conceal_temporal_2_macroblock_dynamic(Frame* frame, Frame *referenceFrame,
 }
 
 //conceals all subblock by first using motion estimation. If the error is too high then spatial interpollation is used.
+//This method will cover the whole frame by using motion estimation (interpolation of the motion vectors)
+//using subblocks of size = 2^size; (2,4,8,16)
 void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, const int size){
 	//Debug and evaluation
 	startChrono();
@@ -1671,8 +1673,9 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, con
 	}
 	std::cout << "\t[temporal 2 (" << size << ")] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
-//uses motion on the whole macroblock and then tries to improve the solution by moving part of the blocks 
+//Same as temporal2, but dynamical; uses motion on the whole macroblock and then tries to improve the solution by moving part of the blocks 
 //(e.g. a block might be covered by a movement of subsize 16, parts 8 en parts in size 2)
+//This method will call spatial2 if the error is too big
 void ErrorConcealer::conceal_temporal_2_dynamic(Frame *frame, Frame *referenceFrame){
 	//debug & evaluation
 	int missing = 0;
