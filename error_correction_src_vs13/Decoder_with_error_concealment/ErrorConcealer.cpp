@@ -863,7 +863,7 @@ inline void f2(Macroblock* MB,	int* exist_l, int* exist_r, int* exist_t, int* ex
 						useConceal2 = true;
 					}
 				}
-				else {								// p1 is part of the right MB.
+				else {								// p1 is part of the left MB.
 					d1_x = k;
 					d1_y = d1_y_temp;
 
