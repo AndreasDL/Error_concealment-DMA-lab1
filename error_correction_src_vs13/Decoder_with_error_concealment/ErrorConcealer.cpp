@@ -1703,7 +1703,7 @@ void ErrorConcealer::conceal_temporal_2_dynamic(Frame *frame, Frame *referenceFr
 		const int offset[] = { -frame->getWidth(), frame->getWidth(), -1, 1 };
 
 		//Cover up almost everything, then improve the solution.
-		conceal_spatial_2(frame, false);
+		//conceal_spatial_2(frame, false);
 		startChrono();
 		//determine state, fix motion && fill queue first time (we can always do motion since it only depends on the previous frame; all macroblocks, concealed or not, will be there
 		for (int i = 0; i < numMB; i++){
