@@ -28,7 +28,7 @@ This is done by using a subsize of 2, the method may fall back on method 1 oif t
 9:same as 4, but with a dynamical subsize.
 
 ##notes:
-* mehtod 8 will always call 1 first and then try to improve the solution.
+* method 8 will always call 1 first and then try to improve the solution.
 
 # Contributing information
 
