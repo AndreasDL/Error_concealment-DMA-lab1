@@ -89,7 +89,17 @@ inline int getNeighbours(Frame *frame, const int MBx){
 	bool exists_b = mb->getYPos() < frame->getHeight() - 1 && !frame->getMacroblock(MBx + frame->getWidth())->isMissing();//bot?
 	return exists_l + exists_b + exists_r + exists_t;
 }
-
+//since we cannot access the pointers inside the frame, this function is used to 'set' the best block in the frame.
+inline void copyValues(const Macroblock * from, Macroblock *to){
+	//copy of values because we can't change the macroblock pointer in the frame.
+	for (int j = 0; j < 16; j++){
+		for (int i = 0; i < 16; i++){
+			to->luma[j][i] = from->luma[j][i];
+			to->cb[j / 2][i / 2] = from->cb[j / 2][i / 2];
+			to->cr[j / 2][i / 2] = from->cr[j / 2][i / 2];
+		}
+	}
+}
 //timing functions for debugging and evaluation purposes only!
 double starttime;
 void startChrono(){
@@ -527,7 +537,6 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame,const bool setConcealed){
 	}
 	std::cout << "\t[Spatial 2] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
-
 
 // The edge detection function from exercise 2.C is situated in f2. This will be called from within conceal_spatial_3
 void f2(Macroblock* MB,	int* exist_l, int* exist_r, int* exist_t, int* exist_b,	MBSTATE* MBstate,const int MBx,Frame *frame){
@@ -1662,54 +1671,6 @@ void ErrorConcealer::conceal_temporal_2(Frame *frame, Frame *referenceFrame, con
 	std::cout << "\t[temporal 2 (" << size << ")] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
 void ErrorConcealer::conceal_temporal_2_dynamic(Frame *frame, Frame *referenceFrame){
-	//Debug and evaluation
-	startChrono();
-	int missing = 0;
-	if (!frame->is_p_frame()){
-		//if the frame is not Predictibely coded (we should have the whole frame), then we conceal using the spacial method instead.
-		conceal_spatial_2(frame, true);
-	}else{
-		int numMB = frame->getNumMB();
-		queue<int> todo;//keep track of blocks with big errors
-		MBSTATE* MBstate = new MBSTATE[numMB];
-
-		for (int MBx = 0; MBx < numMB; ++MBx){
-			Macroblock *MB = frame->getMacroblock(MBx);
-			if (MB->isMissing()){
-				missing++;
-				float err = conceal_temporal_2_macroblock_dynamic(frame, referenceFrame, MBx);
-				if (err > 30){ //Error too big => use spatial
-					todo.push(MBx);
-					MBstate[MBx] = MISSING;
-				}else{
-					MB->setConcealed();
-					MBstate[MBx] = CONCEALED;
-				}
-			}
-			MBstate[MBx] = OK;
-		}
-
-		//fix blocks with big errors
-		while (!todo.empty()){
-			int num = todo.front();
-			todo.pop();
-			Macroblock* block = frame->getMacroblock(num);
-			int exists_top = block->getYPos() != 0 ? 1 : 0;
-			int exists_bot = block->getYPos() < frame->getHeight() - 1 ? 1 : 0;
-			int exists_left = block->getXPos() != 0 ? 1 : 0;
-			int exists_right = block->getXPos() < frame->getWidth() - 1 ? 1 : 0;
-			f(block, &exists_left, &exists_right, &exists_top, &exists_bot, MBstate, num, getNeighbours(frame, num), frame);
-			block->setConcealed();
-			MBstate[num] = CONCEALED;
-		}
-		delete[] MBstate;
-	}
-	std::cout << "\t[temporal 2 ( dynamic)] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
-}
-
-//temporal 3
-//same as temporal 2 but optimized to tackle multiple adjecent blocks are missing
-void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 	//debug & evaluation
 	int missing = 0;
 
@@ -1722,6 +1683,7 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 		//init
 		const int numMB = frame->getNumMB();
 		MBSTATE* mbstate = new MBSTATE[numMB];
+		float* errors = new float[numMB];
 		priority_queue<task, vector<task>, std::less<task>> todo;
 		const int offset[] = { -frame->getWidth(), frame->getWidth(), -1, 1 };
 
@@ -1732,8 +1694,8 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 		for (int i = 0; i < numMB; i++){
 			Macroblock* mb = frame->getMacroblock(i);
 			if (mb->isMissing()){
-				int err = conceal_temporal_2_macroblock_dynamic(frame, referenceFrame,i);
-				if (err > 20){
+				errors[i] = conceal_temporal_2_macroblock_dynamic(frame, referenceFrame, i);
+				if (errors[i] > 20){
 					mbstate[i] = MISSING;
 					task element(getNeighbours(frame, i), frame->getMacroblock(i));
 					todo.push(element);
@@ -1754,9 +1716,14 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 			const int MBx = mb->getMBNum();
 
 			//what blocks exists?
-			int exists[] = {1,1,1,1};//{ mb->getYPos() != 0, mb->getYPos() < frame->getHeight() - 1, mb->getXPos() != 0, mb->getXPos() < frame->getWidth() - 1 };
-			f(mb, &exists[pos_LEFT], &exists[pos_RIGHT], &exists[pos_TOP], &exists[pos_BOT], mbstate, MBx, getNeighbours(frame, MBx), frame);
-			int errnew = CheckMB(mb, frame, MBx);
+			int exists[] = { 1, 1, 1, 1 };//{ mb->getYPos() != 0, mb->getYPos() < frame->getHeight() - 1, mb->getXPos() != 0, mb->getXPos() < frame->getWidth() - 1 };
+			Macroblock temp(*mb);
+			f(&temp, &exists[pos_LEFT], &exists[pos_RIGHT], &exists[pos_TOP], &exists[pos_BOT], mbstate, MBx, getNeighbours(frame, MBx), frame);
+			int errnew = CheckMB(&temp, frame, MBx);
+			if (errnew < errors[MBx]){ //better?
+				//copy of values because we can't change the macroblock pointer in the frame.
+				copyValues(&temp,mb);
+			}
 
 			mb->setConcealed();
 			mbstate[MBx] = CONCEALED;
@@ -1776,6 +1743,113 @@ void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
 				todo.pop();
 			}
 		}
+		delete[] mbstate;
+		delete[] errors;
+	}
+	std::cout << "\t[temporal 2 ( dynamic)] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
+}
+
+//temporal 3
+//same as temporal 2 but optimized to tackle multiple adjecent blocks are missing
+//if p frame => use spatial
+//else try to fix with sizes 2,4,8 & 16 and keep best
+//if the error is still too high => put in priority queue sorted by number of neighbours
+//then run through the pqueue and fix block with most neighbours first using spatial.
+//if the result of spatial is worse then motion, then reuse the motion.
+void ErrorConcealer::conceal_temporal_3(Frame *frame, Frame *referenceFrame){
+	//debug & evaluation
+	int missing = 0;
+
+	if (!frame->is_p_frame()){
+		//if the frame is not Predictibely coded (we should have the whole frame), then we conceal using the spacial method instead.
+		// we can't use the temporal method because the reference frame is this frame.
+		conceal_spatial_2(frame, true);
+		startChrono();
+	}else{
+		//Cover up almost everything, then improve the solution.
+		//conceal_spatial_2(frame, false);
+		startChrono();
+
+		//init
+		const int numMB = frame->getNumMB();
+		MBSTATE* mbstate = new MBSTATE[numMB];
+		float* errors = new float[numMB];
+		priority_queue<task, vector<task>, std::less<task>> todo;
+		const int offset[] = { -frame->getWidth(), frame->getWidth(), -1, 1 };
+
+		//determine state, fix motion && fill queue first time (we can always do motion since it only depends on the previous frame; all macroblocks, concealed or not, will be there
+		for (int i = 0; i < numMB; i++){
+			Macroblock* mb = frame->getMacroblock(i);
+			if (mb->isMissing()){
+
+				Macroblock blocks[4];
+				blocks[0] = Macroblock(*mb);
+				int best_block = 0, subsize = 4;
+				errors[i] = conceal_temporal_2_macroblock(frame, referenceFrame, &blocks[0], i, 2);
+
+				for (int b = 1; b < 4; b++){
+					blocks[b] = Macroblock(*mb);
+					float err = conceal_temporal_2_macroblock(frame, referenceFrame, &blocks[b],i, subsize);
+					if (err < errors[i]){
+						errors[i] = err;
+						best_block = b;
+					}
+
+					subsize *= 2;
+				}
+				
+				//set values from best block
+				copyValues(&blocks[best_block], mb);
+
+				if (errors[i] > 25){
+					mbstate[i] = MISSING;
+					task element(getNeighbours(frame, i), frame->getMacroblock(i));
+					todo.push(element);
+				}else{
+					mbstate[i] = CONCEALED;
+					mb->setConcealed();
+				}
+
+				missing++;
+			}else{
+				mbstate[i] = OK;
+			}
+		}
+
+		while (!todo.empty()){
+			Macroblock* mb = todo.top().second;
+			todo.pop();
+			const int MBx = mb->getMBNum();
+
+			//what blocks exists?
+			int exists[] = {1,1,1,1};
+			Macroblock temp(*mb);
+			f(&temp, &exists[pos_LEFT], &exists[pos_RIGHT], &exists[pos_TOP], &exists[pos_BOT], mbstate, MBx, getNeighbours(frame, MBx), frame);
+			if (CheckMB(&temp, frame, MBx) < errors[MBx]){ //better?
+				//copy of values because we can't change the macroblock pointer in the frame.
+				copyValues(&temp, mb);
+			}
+
+			mb->setConcealed();
+			mbstate[MBx] = CONCEALED;
+			//add neighbours again to the queue
+			//(so we have the values with updated neighbours, since they will have more neighbours, they will be in front of previous tasks)
+			for (int i = 0; i < 4; i++){
+				int item = MBx + offset[i];
+				if (exists[i] && frame->getMacroblock(item)->isMissing()){
+					task t(getNeighbours(frame, item), frame->getMacroblock(item));
+					todo.push(t);
+				}
+			}
+
+			//cleanup - skip already concealed 
+			//(because we add blocks multiple times , it could be that they have already been concealed, we need to clean these blocks out of the queue untill we have a new missing block)
+			while (!todo.empty() && !todo.top().second->isMissing()){
+				todo.pop();
+			}
+		}
+		delete[] mbstate;
+		delete[] errors;
 	}
 	std::cout << "\t[temporal 3] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
