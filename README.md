@@ -37,6 +37,9 @@ This is done by using a subsize of 2, the method may fall back on method 1 oif t
 * Test_environment => exe's for encoding and measurement
 * err_correction_src_vs13 => source code for vs2013
 * data => sample error patterns
+* README => this file
+* .gitignore => obvious reasons
+* runall.bat => debugging, will decode and enc file with all possible methods
 
 ## Encoding 
 * use Test_environment\Encoder.exe 
