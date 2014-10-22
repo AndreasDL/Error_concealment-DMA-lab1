@@ -8,7 +8,7 @@ This is a lab session / project of the course 'Design of multimedia application'
 The program will simulate missing macroblocks and try to conceal them as good as possible.
 
 ## Run
-Decoder_with_error_concealment.exe <enc file> <output file> <error pattern> <method>
+Decoder_with_error_concealment.exe *enc file* *output file* *error pattern* *method*
 * enc file: the encoded file (see 'Encoding' on how to encode video files)
 * output file: the output in yuv format (you can use the Test_environment\YUVDisplay.exe to open it)
 * error pattern: the error pattern to simulate the missing macroblocks
