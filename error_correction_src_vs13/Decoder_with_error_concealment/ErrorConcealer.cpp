@@ -259,7 +259,15 @@ void ErrorConcealer::conceal_spatial_1(Frame *frame){
 }
 
 //fix method for conceal_spatial_2
-void f(Macroblock* MB,int* exist_l, int* exist_r, int* exist_t, int* exist_b,MBSTATE* MBstate, int MBx, int neighbs, Frame *frame){
+inline void f(Macroblock* MB,int* exist_l, int* exist_r, int* exist_t, int* exist_b,MBSTATE* MBstate, int MBx, int neighbs, Frame *frame){
+
+	// ****MODIFICATION FOR EX. 2B
+	// function "f()" has been updated with two modifications. The first one has been done by adding the input parameter "neighbs". 
+	// It specifies the number of surrounding macroblocks sufficients to activate the interpolation. If
+	// the number of existing neighbouring macroblocks is not big enough, then no interpolation operations will be made.
+	// The second one regards the interpolation complexity. In the interpolation block now "f()" performs the 
+	// interpolation by using at most two macroblocks, the closest two if more than 2 are available.
+
 	Macroblock* MB_l;
 	Macroblock* MB_r;
 	Macroblock* MB_t;
@@ -539,7 +547,7 @@ void ErrorConcealer::conceal_spatial_2(Frame *frame,const bool setConcealed){
 }
 
 // The edge detection function from exercise 2.C is situated in f2. This will be called from within conceal_spatial_3
-void f2(Macroblock* MB,	int* exist_l, int* exist_r, int* exist_t, int* exist_b,	MBSTATE* MBstate,const int MBx,Frame *frame){
+inline void f2(Macroblock* MB,	int* exist_l, int* exist_r, int* exist_t, int* exist_b,	MBSTATE* MBstate,const int MBx,Frame *frame){
 
 	// This method is based upon the paper 'XXX YYY ZZZ' by xxx, yyy, zzz (link).
 
@@ -1258,7 +1266,7 @@ void f2(Macroblock* MB,	int* exist_l, int* exist_r, int* exist_t, int* exist_b,	
 
 	delete MBEmpty;
 }
-//Use edge detection
+//Uses edge detection to conceal macroblocks
 void ErrorConcealer::conceal_spatial_3(Frame *frame){
 	//debug & evaluation
 	startChrono();
@@ -1387,7 +1395,7 @@ void ErrorConcealer::conceal_spatial_3(Frame *frame){
 	std::cout << "\t[Spatial 3] Missing macroblocks: " << missing << " time needed : " << stopChrono() << endl;
 }
 
-//assume no motion & use previous block
+//block lost? assume there is no motion in the frames & use the previous block
 void ErrorConcealer::conceal_temporal_1(Frame *frame, Frame *referenceFrame){
 	//debug & evaluation
 	startChrono();
@@ -1413,7 +1421,7 @@ void ErrorConcealer::conceal_temporal_1(Frame *frame, Frame *referenceFrame){
 }
 
 //temporal 2
-//fill a sub block based on a motion vector
+//fill a subblock with pixels from the previous frame, using a motion vector
 inline void FillSubBMV(Macroblock *MB, Frame *frame, Frame *referenceFrame, const MotionVector &vec, const int _x, const int _y, const int subsize){
 
 	int MBxpos = MB->getXPos() * 16;
@@ -1440,7 +1448,7 @@ inline void FillSubBMV(Macroblock *MB, Frame *frame, Frame *referenceFrame, cons
 		}
 	}
 }
-//how much does the edge of MB differ from usedMB ?
+//how much does the edge of MB differ from usedMB ? this gives an error value that we can use to determine how good the concealment was
 inline float CheckMB(Macroblock *MB, Frame *frame, const int MBx){
 	int verschil = 0;
 	int aantalvglnpixels = 0;
@@ -1469,7 +1477,7 @@ inline float CheckMB(Macroblock *MB, Frame *frame, const int MBx){
 	float errorperpixel = float(verschil) / aantalvglnpixels;
 	return errorperpixel;
 }
-//how much does the edge of a subblock differ from usedMB ?
+//same as above, but for a subblock
 inline float CheckSubB(Macroblock *MB, Frame *frame, const int MBx, const int _x, const int _y, const int subsize){
 	int verschil = 0;
 	int aantalvglnpixels = 0;
@@ -1551,7 +1559,7 @@ inline MotionVector getMV(Frame* frame, const int MBx, const int sub_x, const in
 
 	return (denominatorX == 0 && denominatorY == 0 ? notthere : mv);
 }
-//covers only 1 macroblock at position _x,_y in the macroblock with size= subsize
+//covers only 1 macroblock at position _x,_y in the macroblock with size= subsize and returns the error
 inline float conceal_temporal_2_subblock(Frame * frame, Frame * referenceFrame, Macroblock* mb, const int subsize, const int _x, const int _y){
 	const int MBx = mb->getMBNum();
 	MotionVector vec = getMV(frame, MBx, _x, _y, subsize);
@@ -1559,8 +1567,8 @@ inline float conceal_temporal_2_subblock(Frame * frame, Frame * referenceFrame, 
 	FillSubBMV(mb, frame, referenceFrame, vec, _x, _y, subsize);
 	return CheckSubB(mb,frame,MBx,_x,_y,subsize);
 }
-//conceals a macroblock by using motion estimation from 3B and returns the error. Does not set this block to concealed
-float conceal_temporal_2_macroblock(Frame *frame, Frame* referenceFrame,Macroblock * MB, const int MBx, const int subsize){
+//conceals a macroblock by using motion estimation from 3B and returns the error. Does not set this block to concealed. Returns the error
+inline float conceal_temporal_2_macroblock(Frame *frame, Frame* referenceFrame,Macroblock * MB, const int MBx, const int subsize){
 	//foreach subblock
 	MotionVector tohold;
 	tohold.x = 0;
@@ -1581,8 +1589,8 @@ float conceal_temporal_2_macroblock(Frame *frame, Frame* referenceFrame,Macroblo
 	MB->mv.y = tohold.y / aant;
 	return CheckMB(MB, frame, MBx);
 }
-//same as conceal_temporal_2_macroblock but now with dynamic block sizes
-float conceal_temporal_2_macroblock_dynamic(Frame* frame, Frame *referenceFrame, const int MBx){
+//same as conceal_temporal_2_macroblock but now with dynamic block sizes. Returns the error
+inline float conceal_temporal_2_macroblock_dynamic(Frame* frame, Frame *referenceFrame, const int MBx){
 	Macroblock *mb = frame->getMacroblock(MBx);
 	int sizes[4] = { 16, 8, 4, 2 };
 
