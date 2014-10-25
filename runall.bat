@@ -27,3 +27,7 @@ Decoder_with_error_concealment.exe "..\..\solutions\common_natural_8.enc" "..\..
 
 Decoder_with_error_concealment.exe "..\..\solutions\common_natural_8.enc" "..\..\solutions\output_9_simple.yuv" "..\..\data\error_pattern_simple_beowulf.txt" 9 > simple9.txt
 Decoder_with_error_concealment.exe "..\..\solutions\common_natural_8.enc" "..\..\solutions\output_9_complex.yuv" "..\..\data\error_pattern_complex_beowulf.txt" 9 > complex9.txt
+
+cd  "..\.."
+perl "parseResults.pl"
+
