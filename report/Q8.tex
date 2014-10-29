@@ -1,0 +1,3 @@
+\section[What would be the advantages and disadvantages of client-side buffering?]{}
+
+Client side buffering can hide most network problems. A sudden drop in network speed could be hidden easily by using frames out of the buffer while waiting for the network to catch up. When the buffer is large enough, then it's even possible to retransmit lost macroblocks. However the retransmission needs to happen within a short time window. The request for retransmission and retransmission itself has to be completed before the frame is needed. Even then there is no guarantee that no macroblocks will get lost. Note that buffering also requires more resources and is not always possible (e.g. livestreaming).

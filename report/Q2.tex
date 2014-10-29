@@ -1,0 +1,17 @@
+\section[The rationale of why these methods were chosen, and a discussion of their advantages and disadvantages.]{}
+
+\subsection{Spatial interpolation}
+Spatial interpolation techniques have many pros: since they only work just on the current frame, retransmission or knowledge about previous frames isn't required. They are also very simple to implement and yield satisfactory results. Even though it's a good compromise, details are often concealed by unnatural blurry areas that can easily be seen by the human eye. An improvement to this method is to combine it with motion estimation. However, spatial interpolation is fundamental when the frame changes completely, because concealing errors using previous frames would then lead to wrong results: the previous frame will still be partially visible.
+
+\subsection{Edge detection}
+This method is based on the paper 'Flexible Error Concealment for H.264 Based on Directional Interpolation' by O. Nemethove, A. Al-Moghrabi and M. Rupp, in which the described methods seemed to yield good results. The authors propose both a solution with one dominant direction and an extended version which divides a macroblock in sections. The method implemented in this assignment is the simpler method with one dominant direction.
+\npar
+The method works well when there are not too many blocks missing (the simple error pattern). If sufficient edge data is available, the method usually finds a correct dominant direction. However, if a lot of the neighbours are missing (the complex error pattern), the dominant direction won't always be correct. This results in edges that are uncorrectly being prolonged. This explains why the result when applying the complex error pattern is not optimal, while the result when applying the simple error pattern is acceptable. In case of the simple pattern, the method only makes observable mistakes at the edges of e.g. persons, but the video stays 'watchable' at any time.
+\npar
+Another (minor) drawback of this method is that sometimes there are two (or more) dominant edges which should have been prolonged (= paritioning the macroblock in segments). In these cases the edges will be less efficient. 
+\npar
+As an example, a screenshot of a concealed frame is provided in Figure \ref{fig:2C} in Appendix \ref{app:Q2}. Figure \ref{fig:2C_prior} shows the frame prior to this concealed frame. Block 1 shows a wrongly prolonged edge. The arm of the person is 'smudged out' into the background. Block 2 illustrates a case where a missing macroblock is concealed correctly, so that a viewer can barely notice that this block was missing and has been concealed. The nose of the person in block 3 more or less has a correct edge direction. Though, in this case the color values don't match the values of the original frame.\\
+Please note that there are many more concealed macroblocks present in the frame, while as a viewer you can only notice a few of them.
+\clearpage
+\subsection{Motion estimation}
+Motion estimation works excellent when the new frame overlaps with the previous frame. If the camera moves slow then the no motion estimation already works pretty good. Also the provided method which uses the best fitting motion vector of the surrounding neighbours yields good results. The lab exercise was to improve this method by first using smaller subblocks with fixed sizes, then auto selecting the best size and finally creating a dynamic system. The output will be surprisingly similar, as explained in Q5.

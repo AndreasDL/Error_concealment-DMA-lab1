@@ -1,0 +1,12 @@
+\section[An answer, with explanation, to the following questions:]{}
+\subsection[Can a clear winner be found among all techniques and groups of techniques? If so, what would be a possible reason for not choosing the best candidate
+(thus, choosing another technique)? If not, which factors decide which technique is best?]{}
+\subsection[When you do a visual inspection of the reconstructed sequences, do you get
+the same results? If so, what conclusions can be drawn from this experiment? If not, what are the main differences and what can be concluded?]{}
+
+It is not possible to select a clear winner, because the output heavily depends on the given frame. For instance if the frame has colors that melt together, then the spatial interpolation would give good results. Spatial interpolation is not good at concealing edges, because the result is usually blurry. If a static text is shown in front of a moving background, then the text will be easier to read with zero motion concealment, this is visible in Figure \ref{Q7:zerotwee} of Appendix \ref{Q7}. 
+\npar
+Edge detection works good when there are sufficient edges. Too much different edges and it becomes confused, too few and the edge detection will have to fall back on spatial interpolation. The neighbours also have influence: if the missing macroblock has a lot of neighbours, then the edge detection will succeed in finding and restoring the edge. However if a lot of the neighbours are missing, then the edge method will have a hard time finding the edge. 
+\npar
+Generally the spatial methods give better SSIM values for the simple pattern whereas the motion methods are better to tackle the complex pattern, this is shown in Appendix \ref{app:Q10} and is also visible in the output, see Figure \ref{Q7:edgemotion} and Figure \ref{Q7:edgemotioncomplex} in Appendix \ref{Q7}.
+

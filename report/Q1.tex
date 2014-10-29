@@ -1,0 +1,179 @@
+\section[Pseudocode and explanatory notes for the methods that have been implemented in
+Exercises 2.B, 2.C, 3.B, 3.C, and 3D, paying particular attention to the way edge
+information and content-adaptivity were leveraged.]{}\label{Q1}
+
+\subsection{2.B}
+In order to reduce the interpolation complexity, a similar technique as 2.A is applied. First the function f has been modified so that only two macroblocks are used for the interpolation (the two closest in case more than two macroblocks are available). Secondly, the function f originally performed the interpolation if there was at least one valid neighboring macroblock. New pixels values would be overridden if the macroblock has more neighbours. In other words, the method would perform the interpolation multiple times. This behaviour is removed. This is done by adding a new input parameter ($neighbs$) to f, which specifies the number of surrounding macroblocks required to enable the interpolation. The control block will only interpolate if the number of surrounding macroblocks is bigger than "neighbs" (and not bigger than zero, as before). In the following pseudocode, the changes in respect to the first version of f will be highlighted.
+\vspace{1em}
+\begin{lstlisting}[frame=single]
+void f(Macroblock, exist_l/r/t/b, MBstate, MBx, neighbs, frame){
+	   ...
+	// No changes in respect to the original f
+     ...
+	// New "if" block to check the number of surrounding macroblocks:
+	if exist_l + exist_r + exist_t + exist_b > neighbs{
+		for (int i = 0; i < 16; ++i)	{
+			for (int j = 0; j < 16; ++j){
+				if (neighbs > 1 and more than two neighbours are available){
+                	if top is closest: set exist_bottom to false and vice versa
+                    if right is closest: set exist_left to false and vice versa
+		...
+      //Pixel interpolation
+}
+\end{lstlisting}
+
+\subsection{2.C}
+The body of the $conceal\_spatial\_2$ method is the same as the 2.B exercise. The difference between $conceal\_spatial\_2$ and $conceal\_spatial\_3$ is the function that is used for the error concealment. For $conceal\_spatial\_3$, f2 is used instead of f. Only f2 is discussed here.
+
+\vspace{1em}
+\begin{lstlisting}[frame=single]
+
+void f2(Macroblock, exist_l/r/t/b, State, Macroblock_index, frame){
+	
+	declare both horizontal and vertical 3x3 Sobel kernel
+
+	// Determine which borders of the missing macroblock are present
+
+	for(border = upper, right, lower, left)
+		if border macroblock exists
+			assign left border to macroblock object 
+		else set exist_border to zero
+
+	// Extract edge data from existing borders and calculate gradients and slopes
+	for(border = upper, right, lower, left)
+		if border exists
+			determine x_gradient of border by convolving Sobel kernel with MB edge
+			determine y_gradient of border by convolving Sobel kernel with MB edge
+			// Note that we leave 1 rown/column open between the missing MB, and
+			// The center of the convolution (we convolve with row/column 1 or 14
+			// instead of 0 or 15). Otherwise, we would need pixels from the missing
+			// MB. For the same reason, we only use 14 pixels per edge (instead of 
+			// 16). When using 16, we would also need pixels of the upper-right, 
+			// lower-right, ... macroblock (8-connected instead of 4-connected).
+			
+			gradient = sqrt(x_gradient^2 + y_gradient^2)
+			slope = 1.0/tan(y_gradient / x_gradient)			
+
+	// Determine dominant gradient direction
+	calculate mean of all gradients
+	calculate variance of all gradients (= sum(gradient-mean)/sizeof(gradients))
+	
+	/////// dominant direction = weighing the slopes with their gradient
+	/////// = sum(gradient*slope) / sum(gradient)
+	for all gradients
+		if gradient > variance
+			numerator = abs(gradient)*slope
+			denominator = abs(gradient)
+
+	dominant direction = numerator / denominator
+
+	// Interpolate the pixels in dominant direction 
+	
+  for(all pixels in macroblock)
+		////// First: luma values (16x16)
+		slope = 1/tan(dominant direction)
+	
+		////// Per pixel we want to conceal, we need 2 border pixels which we will
+		////// to find the concealed pixel value.
+		////// P1:
+		if slope > 0			//P1 will be part of left or upper border
+			find border pixel with the dominant slope
+			if needed border macroblock exists
+				assign border pixel luma value to p1
+			else if other border macroblock exists (left <-> upper)
+				assign closest luma value to p1 (will be left[0][15] or upper[15][0])
+			else
+				perform spatial interpolation, described in conceal_spatial_2
+		else					//P1 will be part of the left or lower border
+					find border pixel with the dominant slope
+			if needed border macroblock exists
+				assign border pixel luma value to p1
+			else if other border macroblock exists (left <-> lower)
+				assign closest luma value to p1 (will be lower[0][0] or left[15][15])
+			else
+				perform spatial interpolation, described in conceal_spatial_2
+	
+		////// P2:
+		if slope > 0			//P2 will be part of upper or right border
+			repeat the above steps
+		else					// P2 will be part of right or lower border
+			repeat the above steps
+	
+		calculate distances from pixel to p1 and p2
+	
+		// Now we interpolate the pixel luma values, weighted with the distances
+		concealed pixel luma = 1/(dist1 + dist2)*(dist2*p1_luma + dist1*p2_luma)	
+	}
+	////// Second: cb and cr values (8x8)    
+	do exactly the same as above, but for 8x8 instead of 16x16		
+}
+
+\end{lstlisting}
+
+\subsection{3.B}
+This method will first divide the macroblock (of size 16x16) into smaller subblocks of a fixed size (2,4,8 or 16). Then a motion vector is calculated for each subblock. Complex reduction is used. At first the average luma value of each subblock is calculated and then searched within a window around the macroblock. This proved to be too slow for the results. To make this method faster, the calculation changed to interpolation of the motion vectors of the surrounding macroblocks. This is done in the same way as 2B, but now for both the x and y component of the motion vector. If the given frame is a P frame or a predictively coded frame, then spatial interpolation is used instead. 
+
+\begin{lstlisting}[frame=single]
+if (p_frame): use spatial
+else
+	foreach macroblock mb
+    	if (mb->isMissing)
+        	interpolate motion vector
+            fill the frame
+            if (error of block > 25) 
+            	put in queue
+	foreach element in queue: conceal_spatial
+\end{lstlisting}
+
+\subsection{3.C}
+This method is a newer, extended version of 3B, where extra code is added to tackle the complex pattern.
+This method uses auto-selection of the subblock sizes. All the possible sizes are tested and the best one is used.
+This works great if the frames 'overlap', so that we can reconstruct one frame by using previous frames. However when the next frame is completly different, then the previous frame 'shines through' the new frame. This is certainly the case with the complex pattern. Therefore the error is calculated by checking which part of the edges match. If this error gets too big then spatial interpolation is used instead.
+\npar
+This spatial interpolation is done in descending neighbour order. The idea is that more available neighbours lead to better concealments. To do this elegantly, a priority queue is used. Changing priorities in this queue proved to be less efficient. To solve this all neighbours of each concealed macroblock are added to the queue. If the macroblock has more neighbours then his predecessor then he will come out first. A downside of this is that we have to clean the queue after each iteration.
+\vspace{1em}
+\begin{lstlisting}[frame=single]
+if (p_frame): use spatial
+else
+	foreach macroblock mb
+    	if (mb->isMissing)
+        	for each subsize
+        		interpolate motion vector
+            	fill the frame
+            	calculate the error
+                
+			copy the values of the best result into the macroblock
+                
+            if (best_error > 25): put in priority queue
+            
+	foreach element in queue
+    	conceal_spatial
+        put neighbours in priority queue
+        clean the priority queue
+\end{lstlisting}
+
+\subsection{3.D}
+This method is similar to 3C, but uses dynamic blocksizes. This means that one macroblock can be covered by subblocks of different sizes. The method starts by concealing the whole macroblock. Then it goes over the different sizes (8,4,2) and checks whether or not the error has decreased. Only when the error decreases, the new values are kept.
+
+\vspace{1em}
+\begin{lstlisting}[frame=single]
+if (p_frame): use spatial
+else
+	foreach macroblock mb
+    	if (mb->isMissing)
+        	Do a motion concealment with subsize = 16, so the whole block is concealed.
+            
+        	for each subsize
+            	for each subblock
+                	create temp macroblock
+                	conceal the subblock (of the temp macroblock)
+                    if err < best_err
+                    	swap the pixel values in the macroblock with the ones from the temp block
+                
+            if (best_error > 25): put in priority queue
+                
+	foreach element in queue
+    	conceal_spatial
+        put neighbours in priority queue
+        clean the priority queue
+\end{lstlisting}

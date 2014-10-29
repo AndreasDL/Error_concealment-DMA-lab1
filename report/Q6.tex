@@ -1,0 +1,3 @@
+\section[Conclusions regarding the comparison of the different results (for the spatial and
+temporal techniques separately, as well as for the comparison of both approaches).]{}
+The spatial methods are fast for the simple pattern, but become a lot slower for the complex pattern. This is due to the overhead it takes to search the blocks with most neighbours. This does not occur for the motion methods. These methods are optimized for speed. They use motion on all blocks, and store the blocks that have too big errors in a priority queue. These blocks are handled in order of present neighbours. Thus, here the overhead is reduced by using a priority queue.

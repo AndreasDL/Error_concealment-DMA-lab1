@@ -1,0 +1,6 @@
+\section[Evaluate the performance of the different sub-macroblock sizes for error conceal-
+ment and compare this with the results for an adaptive sub-macroblock conceal-
+ment method (Exercise 3.D). Perform an evaluation of the objective and subjective
+quality.]{}
+
+If the smaller subblocks are used, the processing time increases. However, as you can see in Appendix \ref{Q3:timings} the PSNR and SSIM values do not differ that much. This seems strange, but can be explained as follows: the motion in the frame tends to be consistent over the whole frame. If the camera moves, then the whole frames moves, this consistency causes the motion vectors mv\textsubscript{b}, mv\textsubscript{c}, mv\textsubscript{d} and mv\textsubscript{e} of Figure \ref{Q5:motions} in Appendix \ref{Q5} to be (almost) equal. Therefore the interpolation doesn't have a lot of impact. This impact would be more visible when there is a new shot, but our methods will detect the huge error and correct it by switching to spatial interpolation. This also explains why 3C and 3D have similar SSIM and PSNR values, but are slower due to the fact that they do more work.

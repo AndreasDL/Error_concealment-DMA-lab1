@@ -1,0 +1,5 @@
+\section[Give a description of the complexity reduction techniques you have introduced in Exercise 3.D. How did the result of the algorithm match with the expected behavior?
+Can you describe other algorithms you did not implement?]{}
+The original assignment was to create the block sizes dynamically. As mentioned earlier, the searching of luma values to determine the motion vectors turned out to be too slow. To solve this, interpolation of the surrounding motion vectors is used. This resulted in a huge performance gain.
+\npar
+To reduce the computation time, two macroblocks are used. The previous one holds the macroblock that has been optimized so far. The new one holds the result of the new iteration. For example: one block of 8x8 in the previous one could be replaced by 4 blocks with size 4x4 in the new block. Once that new block is formed, the error is calculated. If this error is lower then the error of the previous one, the blocks are swapped, else the new block is discarded. 

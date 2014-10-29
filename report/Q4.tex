@@ -1,0 +1,5 @@
+\section[A comparison of the different results, as well as an explanation of the relation
+between the results.]{}
+As you can see in Appendix \ref{app:Q4}, explaining the results is more or less straight forward. One can see that the spatial methods (2A and 2B) and the zero motion method (3A) are all very fast for the simple pattern, due to their simplicity. 3B takes somewhat more processing, how much more depends on the size of the subblocks. The edge detection (2C) is somewhat slower than 3B, but still uses reasonable time. 3C and 3D are both very complex, even after reductions and are therefore much slower. 
+\npar
+The complex pattern has some differences, firstly the motion methods slowed down by a constant factor. This is normal, since more macroblocks have to be concealed. The story for the spatial methods is different, 2B is relatively much more slower than 3B, this is due to the fact that 2B keeps looking for the blocks with the most neighbours, which causes overhead. 2C uses the same body as 2B, only the interpolation method (f $\rightarrow$ f2) is different. This declares why 2C is also very slow.
